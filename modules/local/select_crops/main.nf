@@ -19,9 +19,9 @@ process SELECT_CROPS {
     """
     select_crops.py \\
         ${nucleus_boundaries} \\
-        --n-crops ${n_crops} \\
-        --crop-size-um ${crop_size_um} \\
-        --pixel-size-um ${pixel_size_um}
+        ${n_crops} \\
+        ${crop_size_um} \\
+        ${pixel_size_um}
     """
     stub:
     """

@@ -12,7 +12,18 @@ process CROP_TRANSCRIPTS {
 
     script:
     """
-    crop_transcripts.py ${crops_csv} ${transcripts}
+    python3 - <<'PYEOF'
+import csv, subprocess
+with open("${crops_csv}") as f:
+    for row in csv.DictReader(f):
+        subprocess.run([
+            "crop_transcripts.py",
+            "${transcripts}",
+            row["x_min_um"], row["x_max_um"],
+            row["y_min_um"], row["y_max_um"],
+            row["crop_id"],
+        ], check=True)
+PYEOF
     """
     stub:
     """

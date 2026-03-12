@@ -12,7 +12,18 @@ process CROP_IMAGE {
 
     script:
     """
-    crop_image.py ${crops_csv} ${morphology_tif}
+    python3 - <<'PYEOF'
+import csv, subprocess
+with open("${crops_csv}") as f:
+    for row in csv.DictReader(f):
+        subprocess.run([
+            "crop_image.py",
+            "${morphology_tif}",
+            row["px_x_min"], row["px_x_max"],
+            row["px_y_min"], row["px_y_max"],
+            row["crop_id"],
+        ], check=True)
+PYEOF
     """
     stub:
     """
