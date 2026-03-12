@@ -10,9 +10,10 @@ process SCORE_CROP {
     val crop_area_mm2
 
     output:
-    path "score.json", emit: score
+    path "*_score.json", emit: score
 
     script:
+    def out_name = "${meta.id}_${crop_id}_${method}_${param_hash}_score.json"
     """
     score_crop.py \\
         ${transcripts_assigned} \\
@@ -21,9 +22,10 @@ process SCORE_CROP {
         ${param_hash} \\
         ${crop_id} \\
         ${crop_area_mm2}
+    mv score.json ${out_name}
     """
     stub:
     """
-    echo '{}' > score.json
+    touch ${meta.id}_${crop_id}_${method}_${param_hash}_score.json
     """
 }
