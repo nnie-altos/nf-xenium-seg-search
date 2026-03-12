@@ -4,7 +4,7 @@ process XR_FULL {
     tag "${meta.id}"
     label 'process_high'
 
-    container 'nfcore/xeniumranger:3.1.1'
+    container 'nf-core/xeniumranger:4.0'
 
     publishDir "${params.outdir}/${meta.id}/xr", mode: params.publish_dir_mode
 
@@ -19,7 +19,8 @@ process XR_FULL {
           emit: results
 
     script:
-    def boundary_stain_flag = boundary_stain.toString() == 'true' ? '--boundary-stain DAPI' : ''
+    // Default behaviour includes boundary stain; explicitly disable when not wanted
+    def boundary_stain_flag = boundary_stain.toString() == 'false' ? '--boundary-stain=disable' : ''
     """
     xeniumranger resegment \\
         --id            xr_output \\

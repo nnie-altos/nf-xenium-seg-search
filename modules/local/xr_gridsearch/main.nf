@@ -7,7 +7,7 @@ process XR_GRIDSEARCH {
     tag "${meta.id}:${param_hash}"
     label 'process_high'
 
-    container 'nfcore/xeniumranger:3.1.1'
+    container 'nf-core/xeniumranger:4.0'
 
     input:
     tuple val(meta), path(xenium_bundle), val(param_hash),
@@ -20,7 +20,8 @@ process XR_GRIDSEARCH {
           emit: results
 
     script:
-    def boundary_stain_flag = boundary_stain.toString() == 'true' ? '--boundary-stain DAPI' : ''
+    // Default behaviour includes boundary stain; explicitly disable when not wanted
+    def boundary_stain_flag = boundary_stain.toString() == 'false' ? '--boundary-stain=disable' : ''
     """
     xeniumranger resegment \\
         --id           xr_output \\

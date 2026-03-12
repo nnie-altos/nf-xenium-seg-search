@@ -20,17 +20,34 @@ process CELLPOSE_FULL {
           emit: results
 
     script:
-    def sharpen_flag = sharpen_tiff.toString() == 'true' ? '--sharpen_tiff' : ''
     """
+    # Optionally sharpen image before Cellpose (unsharp mask via skimage)
+    if [ "${sharpen_tiff}" = "true" ]; then
+        python3 - <<'SHARP'
+import tifffile, numpy as np
+from skimage.filters import unsharp_mask
+img = tifffile.imread("${morphology_tif}")
+sharp = unsharp_mask(img.astype(np.float64), radius=2.0, amount=1.5)
+if img.dtype == np.uint16:
+    tifffile.imwrite("input_for_cellpose.tif",
+                     np.clip(sharp * 65535, 0, 65535).astype(np.uint16))
+else:
+    tifffile.imwrite("input_for_cellpose.tif",
+                     np.clip(sharp * 255, 0, 255).astype(np.uint8))
+SHARP
+        INPUT_IMG="input_for_cellpose.tif"
+    else
+        INPUT_IMG="${morphology_tif}"
+    fi
+
     python3 -m cellpose \\
-        --image ${morphology_tif} \\
+        --image_path \${INPUT_IMG} \\
         --pretrained_model cyto3 \\
         --diameter ${diameter} \\
         --flow_threshold ${flow_threshold} \\
-        ${sharpen_flag} \\
         --no_npy \\
         --save_tif \\
-        --dir .
+        --savedir .
 
     python3 - <<'PYEOF'
 import numpy as np
