@@ -2,7 +2,7 @@ process CROP_TRANSCRIPTS {
     tag "${meta.id}"
     label 'process_low'
 
-    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.0'
+    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.1'
 
     input:
     tuple val(meta), path(transcripts), path(crops_csv)
