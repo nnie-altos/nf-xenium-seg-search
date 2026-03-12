@@ -18,4 +18,9 @@ process SELECT_OPTIMAL_PARAMS {
     """
     aggregate_scores.py ${score_jsons} --param-manifest ${param_manifest}
     """
+    stub:
+    """
+    echo '{}' > optimal_params.json
+touch scores_summary.csv
+    """
 }

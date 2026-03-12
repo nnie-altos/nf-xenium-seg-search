@@ -93,4 +93,8 @@ t["cell_id"] = t["cell_id"].replace(0, None)  # 0 = background → unassigned
 t.to_parquet("transcripts_assigned.parquet", index=False)
 PYEOF
     """
+    stub:
+    """
+    touch cells.parquet transcripts_assigned.parquet
+    """
 }

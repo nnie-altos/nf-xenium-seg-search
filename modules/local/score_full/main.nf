@@ -33,4 +33,8 @@ process SCORE_FULL {
         --yield-weight    ${yield_weight} \\
         ${baseline_arg}
     """
+    stub:
+    """
+    touch ${meta.id}_${method}_score.csv
+    """
 }

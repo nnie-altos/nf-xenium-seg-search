@@ -108,4 +108,8 @@ cells = assigned.groupby("cell_id").size().reset_index(name="transcript_count")
 cells.to_parquet("segger_cells.parquet", index=False)
 PYEOF
     """
+    stub:
+    """
+    touch segger_cells.parquet transcripts_assigned.parquet
+    """
 }

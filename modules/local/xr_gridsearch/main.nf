@@ -32,4 +32,8 @@ process XR_GRIDSEARCH {
         --localcores   ${task.cpus} \\
         --localmem     ${task.memory.toGiga()}
     """
+    stub:
+    """
+    mkdir -p xr_output/outs && touch xr_output/outs/cell_boundaries.parquet xr_output/outs/transcripts.parquet
+    """
 }

@@ -23,4 +23,8 @@ process SELECT_CROPS {
         --crop-size-um ${crop_size_um} \\
         --pixel-size-um ${pixel_size_um}
     """
+    stub:
+    """
+    printf 'crop_id,x_min_um,y_min_um,x_max_um,y_max_um\nstub_crop1,0,0,500,500\n' > crops.csv
+    """
 }

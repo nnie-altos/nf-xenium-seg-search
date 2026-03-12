@@ -56,4 +56,8 @@ else:
 t.to_parquet("transcripts_assigned.parquet", index=False)
 PYEOF
     """
+    stub:
+    """
+    touch cell_polygons.geojson.gz transcripts_assigned.parquet
+    """
 }

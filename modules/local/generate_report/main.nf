@@ -25,4 +25,8 @@ process GENERATE_REPORT {
         --stage1-manifest ${optimal_params} \\
         --outdir          .
     """
+    stub:
+    """
+    touch seg_search_report.html
+    """
 }

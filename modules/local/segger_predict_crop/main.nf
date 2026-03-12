@@ -115,4 +115,8 @@ cells.to_parquet("segger_cells.parquet", index=False)
 print(f"Final: {len(cells)} cells, {assigned.shape[0]} assigned transcripts", file=sys.stderr)
 PYEOF
     """
+    stub:
+    """
+    touch segger_cells.parquet transcripts_assigned.parquet
+    """
 }

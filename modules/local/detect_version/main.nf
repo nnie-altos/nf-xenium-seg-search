@@ -15,4 +15,8 @@ process DETECT_XOA_VERSION {
     detect_xoa_version.py ${experiment_xenium}
     XOA_VERSION=\$(cat xoa_version.txt)
     """
+    stub:
+    """
+    export XOA_VERSION=3
+    """
 }

@@ -14,4 +14,8 @@ process CROP_IMAGE {
     """
     crop_image.py ${crops_csv} ${morphology_tif}
     """
+    stub:
+    """
+    touch stub_crop1_morphology.tif
+    """
 }

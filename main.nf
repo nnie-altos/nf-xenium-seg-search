@@ -12,9 +12,9 @@ nextflow.enable.dsl = 2
 //     --outdir results/ \
 //     --markers assets/markers/lung_markers.yaml
 //
-// Samplesheet columns (CSV, no header required for extra columns):
-//   sample_id, transcripts, nucleus_boundaries, morphology_tif,
-//   xenium_bundle, experiment_xenium, h5ad
+// Samplesheet columns (CSV):
+//   id, xenium_bundle, nf_outdir
+//   (all other paths are derived from these two directories)
 //
 // See README.md and conf/param_grids.yaml for configuration.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -31,21 +31,35 @@ def validateParams() {
 }
 
 // ── Parse samplesheet CSV ────────────────────────────────────────────────────
+// Expected columns: id, xenium_bundle, nf_outdir
+// Derived paths:
+//   transcripts        = ${xenium_bundle}/transcripts.parquet
+//   nucleus_boundaries = ${xenium_bundle}/nucleus_boundaries.parquet
+//   morphology_tif     = ${xenium_bundle}/morphology_focus/morphology_focus_0000.ome.tif (XOA3)
+//                     or ${xenium_bundle}/morphology_focus/ch0000_dapi.ome.tif       (XOA4)
+//   experiment_xenium  = ${xenium_bundle}/experiment.xenium
+//   h5ad               = ${nf_outdir}/${id}/${id}/spatial_with_annotations.h5ad
 def parseSamplesheet(csv_path) {
     Channel.fromPath(csv_path, checkIfExists: true)
         .splitCsv(header: true)
         .map { row ->
-            def meta = [
-                id: row.sample_id
-            ]
+            def meta    = [ id: row.id ]
+            def bundle  = row.xenium_bundle.trim()
+            def nf_out  = row.nf_outdir.trim()
+
+            // Resolve morphology focus — XOA3 vs XOA4 naming differs
+            def morph_v3 = file("${bundle}/morphology_focus/morphology_focus_0000.ome.tif")
+            def morph_v4 = file("${bundle}/morphology_focus/ch0000_dapi.ome.tif")
+            def morph    = morph_v3.exists() ? morph_v3 : morph_v4
+
             [
                 meta,
-                file(row.transcripts,         checkIfExists: true),
-                file(row.nucleus_boundaries,  checkIfExists: true),
-                file(row.morphology_tif,      checkIfExists: true),
-                file(row.xenium_bundle,       checkIfExists: true),
-                file(row.experiment_xenium,   checkIfExists: true),
-                file(row.h5ad,                checkIfExists: true)
+                file("${bundle}/transcripts.parquet",        checkIfExists: true),
+                file("${bundle}/nucleus_boundaries.parquet",  checkIfExists: true),
+                morph,
+                file(bundle,                                  checkIfExists: true),
+                file("${bundle}/experiment.xenium",           checkIfExists: true),
+                file("${nf_out}/${row.id}/${row.id}/spatial_with_annotations.h5ad", checkIfExists: true)
             ]
         }
 }

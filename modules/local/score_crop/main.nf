@@ -22,4 +22,8 @@ process SCORE_CROP {
         ${crop_id} \\
         ${crop_area_mm2}
     """
+    stub:
+    """
+    echo '{}' > score.json
+    """
 }

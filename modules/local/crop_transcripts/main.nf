@@ -14,4 +14,8 @@ process CROP_TRANSCRIPTS {
     """
     crop_transcripts.py ${crops_csv} ${transcripts}
     """
+    stub:
+    """
+    touch stub_crop1_transcripts.parquet
+    """
 }
