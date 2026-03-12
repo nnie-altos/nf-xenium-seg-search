@@ -132,13 +132,16 @@ workflow STAGE1_GRID_SEARCH {
         pixel_size_um
     )
 
-    // ── SEGGER crop grid search (optional — only if model provided) ───────────
+    // ── SEGGER grid search (optional — only if model provided) ───────────────
+    // SEGGER runs on the full Xenium bundle (not crops): it needs
+    // nucleus_boundaries.parquet for spatial graph construction.
+    // tile_size → dataset creation; min_transcripts_per_cell → post-processing.
     ch_segger_results = Channel.empty()
     if (segger_model) {
         SEGGER_PREDICT_CROP(
-            ch_cropped_tx.combine(ch_segger_params)
-                .map { meta, crop_id, tx, ph, min_tx, tile ->
-                    tuple(meta, crop_id, tx, ph, min_tx, tile)
+            ch_meta_bundle.combine(ch_segger_params)
+                .map { meta, bundle, ph, min_tx, tile ->
+                    tuple(meta, bundle, ph, tile, min_tx)
                 },
             file(segger_model)
         )

@@ -1,52 +1,118 @@
-// SEGGER crop-level grid search: inference only (pre-trained model required).
-// Tunes: min_transcripts_per_cell, tile_size.
+// SEGGER full-slide grid search (runs on full Xenium bundle, not crops).
+// SEGGER's spatial graph construction requires nucleus_boundaries.parquet for
+// proper cell-transcript context; cropped inputs don't provide enough context.
+// tile_size → dataset creation; min_transcripts_per_cell → post-processing filter.
 process SEGGER_PREDICT_CROP {
-    tag "${meta.id}:${crop_id}:${param_hash}"
+    tag "${meta.id}:${param_hash}"
     label 'process_gpu'
 
-    container 'danielunyi42/segger_cuda118_py311:latest'
+    container 'docker.io/altoslabscom/xenium-processing-gpu:segger-1.0.14'
 
     input:
-    tuple val(meta), val(crop_id), path(transcripts), val(param_hash),
-          val(min_transcripts_per_cell), val(tile_size)
+    tuple val(meta), path(xenium_bundle, stageAs: "bundle/"), val(param_hash),
+          val(tile_size), val(min_transcripts_per_cell)
     path segger_model
 
     output:
-    tuple val(meta), val(crop_id), val("segger"), val(param_hash),
+    tuple val(meta), val("fullsegger"), val("segger"), val(param_hash),
           path("segger_cells.parquet"), path("transcripts_assigned.parquet"),
           emit: results
 
     script:
+    def CREATE_SCRIPT  = "/workspace/segger_dev/src/segger/cli/create_dataset_fast.py"
+    def PREDICT_SCRIPT = "/workspace/segger_dev/src/segger/cli/predict_fast.py"
     """
-    segger predict \\
-        --transcript-file   ${transcripts} \\
-        --model-dir         ${segger_model} \\
-        --output-dir        . \\
-        --min-transcripts   ${min_transcripts_per_cell} \\
-        --tile-size         ${tile_size}
+    export NUMBA_CACHE_DIR=\$PWD/.numba_cache
+    mkdir -p \$NUMBA_CACHE_DIR
 
-    # Rename SEGGER output to expected filenames
-    CELLS_OUT=\$(ls *_cells.parquet 2>/dev/null | head -1)
-    TRANS_OUT=\$(ls *_transcripts.parquet 2>/dev/null | head -1)
+    # ── Prepare bundle: add parquet column statistics required by SEGGER ─────────
+    python3 - <<'PYEOF'
+import pyarrow.parquet as pq, os
 
-    if [ -n "\$CELLS_OUT" ]; then
-        cp "\$CELLS_OUT" segger_cells.parquet
-    else
-        python3 -c "import pandas as pd; pd.DataFrame(columns=['cell_id']).to_parquet('segger_cells.parquet', index=False)"
-    fi
+os.makedirs('bundle_stats', exist_ok=True)
+for f in ['transcripts.parquet', 'nucleus_boundaries.parquet']:
+    src = f'bundle/{f}'
+    if not os.path.exists(src):
+        continue
+    t = pq.read_table(src)
+    pq.write_table(t, f'bundle_stats/{f}', write_statistics=True, compression='snappy')
 
-    if [ -n "\$TRANS_OUT" ]; then
-        cp "\$TRANS_OUT" transcripts_assigned.parquet
-    else
-        # Fall back: annotate original transcripts with SEGGER cell assignments
-        python3 - <<'PYEOF'
-import pandas as pd, sys
-print("WARNING: SEGGER transcript output not found; using original transcripts", file=sys.stderr)
-t = pd.read_parquet("${transcripts}")
-if "cell_id" not in t.columns:
-    t["cell_id"] = None
-t.to_parquet("transcripts_assigned.parquet", index=False)
+# Symlink remaining bundle files (read-only originals stay untouched)
+for item in os.listdir('bundle'):
+    dst = f'bundle_stats/{item}'
+    if not os.path.exists(dst):
+        os.symlink(os.path.realpath(f'bundle/{item}'), dst)
+
+# SEGGER expects nucleus_boundaries.parquet; fall back to cell_boundaries if missing
+if not os.path.exists('bundle_stats/nucleus_boundaries.parquet') and \
+        os.path.exists('bundle_stats/cell_boundaries.parquet'):
+    os.symlink(os.path.realpath('bundle_stats/cell_boundaries.parquet'),
+               'bundle_stats/nucleus_boundaries.parquet')
 PYEOF
-    fi
+
+    # ── Create SEGGER spatial graph dataset ─────────────────────────────────────
+    python3 ${CREATE_SCRIPT} \\
+        --base_dir    bundle_stats \\
+        --data_dir    segger_dataset \\
+        --sample_type xenium \\
+        --tile_width  ${tile_size} \\
+        --tile_height ${tile_size} \\
+        --n_workers   ${task.cpus}
+
+    # ── Run SEGGER prediction ────────────────────────────────────────────────────
+    GPU_IDS=\$(python3 -c "
+import torch
+n = torch.cuda.device_count()
+print(','.join(str(i) for i in range(n)) if n > 0 else '0')
+" 2>/dev/null || echo "0")
+
+    python3 ${PREDICT_SCRIPT} \\
+        --models_dir       ${segger_model} \\
+        --segger_data_dir  segger_dataset \\
+        --transcripts_file bundle/transcripts.parquet \\
+        --benchmarks_dir   benchmarks_dir \\
+        --batch_size       4 \\
+        --use_cc           False \\
+        --knn_method       kd_tree \\
+        --num_workers      ${task.cpus} \\
+        --gpu_ids          \${GPU_IDS}
+
+    # ── Post-process: filter by min_transcripts and emit standard outputs ────────
+    python3 - <<'PYEOF'
+import pandas as pd, sys
+from pathlib import Path
+
+tx_files = sorted(Path("benchmarks_dir").glob("*/segger_transcripts.parquet"))
+if not tx_files:
+    sys.exit("ERROR: SEGGER produced no transcript output in benchmarks_dir")
+
+t = pd.read_parquet(str(tx_files[0]))
+print(f"SEGGER transcript columns: {list(t.columns)}", file=sys.stderr)
+
+# Normalise cell assignment column name
+if "segger_cell_id" in t.columns:
+    t = t.rename(columns={"segger_cell_id": "cell_id"})
+elif "cell_id" not in t.columns:
+    cell_col = [c for c in t.columns if "cell" in c.lower()]
+    if cell_col:
+        t = t.rename(columns={cell_col[0]: "cell_id"})
+    else:
+        t["cell_id"] = None
+
+# Apply min_transcripts_per_cell filter
+min_tx = int("${min_transcripts_per_cell}")
+if min_tx > 0 and t["cell_id"].notna().any():
+    counts = t.dropna(subset=["cell_id"]).groupby("cell_id").size()
+    keep_cells = set(counts[counts >= min_tx].index)
+    t["cell_id"] = t["cell_id"].where(t["cell_id"].isin(keep_cells), other=None)
+    print(f"min_transcripts={min_tx}: retained {len(keep_cells)} cells", file=sys.stderr)
+
+t.to_parquet("transcripts_assigned.parquet", index=False)
+
+assigned = t.dropna(subset=["cell_id"])
+cells = assigned.groupby("cell_id").size().reset_index(name="transcript_count")
+cells.to_parquet("segger_cells.parquet", index=False)
+print(f"Final: {len(cells)} cells, {assigned.shape[0]} assigned transcripts", file=sys.stderr)
+PYEOF
     """
 }
