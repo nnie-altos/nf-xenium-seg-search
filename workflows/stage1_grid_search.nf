@@ -35,11 +35,10 @@ workflow STAGE1_GRID_SEARCH {
         .splitCsv(header: true, sep: '\t')
         .map { row -> tuple(
             row.param_hash,
-            row.cell_perimeter_ratio_threshold as Float,
-            row.cell_aspect_ratio_limit         as Float,
-            row.cell_size_min                   as Float,
-            row.cell_size_max                   as Float,
-            row.nuclei_distance_threshold       as Float
+            row.cell_compactness                  as Float,
+            row.max_transcript_nucleus_distance   as Float,
+            row.voxel_size                        as Float,
+            row.diffusion_probability             as Float
         )}
 
     ch_cellpose_params = tsvs
@@ -112,8 +111,8 @@ workflow STAGE1_GRID_SEARCH {
     // ── ProSeg crop grid search ───────────────────────────────────────────────
     PROSEG_CROP(
         ch_cropped_tx.combine(ch_proseg_params)
-            .map { meta, crop_id, tx, ph, cprt, carl, csmin, csmax, ndt ->
-                tuple(meta, crop_id, tx, ph, cprt, carl, csmin, csmax, ndt)
+            .map { meta, crop_id, tx, ph, compact, max_nuc_dist, vox, diff ->
+                tuple(meta, crop_id, tx, ph, compact, max_nuc_dist, vox, diff)
             }
     )
 

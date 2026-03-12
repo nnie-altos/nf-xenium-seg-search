@@ -35,11 +35,10 @@ workflow STAGE2_FULL_SCALE {
         .map { m ->
             def p = m.proseg.params
             tuple(
-                p.cell_perimeter_ratio_threshold as Float,
-                p.cell_aspect_ratio_limit         as Float,
-                p.cell_size_min                   as Float,
-                p.cell_size_max                   as Float,
-                p.nuclei_distance_threshold       as Float
+                p.cell_compactness                as Float,
+                p.max_transcript_nucleus_distance as Float,
+                p.voxel_size                      as Float,
+                p.diffusion_probability           as Float
             )
         }
 
@@ -75,8 +74,8 @@ workflow STAGE2_FULL_SCALE {
     // ── ProSeg full-scale ─────────────────────────────────────────────────────
     PROSEG_FULL(
         ch_meta_tx.combine(ch_proseg_opt)
-            .map { meta, tx, cprt, carl, csmin, csmax, ndt ->
-                tuple(meta, tx, cprt, carl, csmin, csmax, ndt)
+            .map { meta, tx, compact, max_nuc_dist, vox, diff ->
+                tuple(meta, tx, compact, max_nuc_dist, vox, diff)
             }
     )
 

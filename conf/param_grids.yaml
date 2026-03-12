@@ -3,18 +3,16 @@
 # All combinations are generated as a factorial grid (unless noted).
 
 proseg:
-  # Perimeter compactness threshold: higher = reject more elongated/irregular cells
-  cell_perimeter_ratio_threshold: [0.3, 0.4, 0.5]
-  # Maximum cell aspect ratio allowed
-  cell_aspect_ratio_limit: [6.0, 8.0, 10.0]
-  # Minimum and maximum cell area (in µm²)
-  cell_size_min: [30, 50, 75]
-  cell_size_max: [4000, 6000, 8000]
-  # Maximum nucleus-to-nucleus distance for multi-nuclei splitting
-  nuclei_distance_threshold: [20, 25, 30]
-  # Reduce to representative subset to keep total combos manageable:
-  # Full factorial = 3×3×3×3×3 = 243 — use Latin-hypercube sampling to ~36 combos
-  max_combinations: 36
+  # Cell shape compactness penalty: lower = more elongated cells allowed (default: 0.04)
+  cell_compactness: [0.02, 0.04, 0.08]
+  # Max distance a transcript can be from any nucleus to be included (µm, default: 60)
+  max_transcript_nucleus_distance: [30, 60, 100]
+  # Voxel resolution for segmentation (µm, default: 1.0)
+  voxel_size: [0.5, 1.0, 2.0]
+  # Probability of transcript diffusion model (default: 0.2)
+  diffusion_probability: [0.1, 0.2, 0.4]
+  # Full factorial: 3×3×3×3 = 81 — use Latin-hypercube sampling to ~27 combos
+  max_combinations: 27
 
 cellpose:
   # Expected cell diameter in pixels (0.2125 µm/px → 30px ≈ 6.4 µm)

@@ -9,8 +9,8 @@ process PROSEG_FULL {
 
     input:
     tuple val(meta), path(transcripts),
-          val(cell_perimeter_ratio_threshold), val(cell_aspect_ratio_limit),
-          val(cell_size_min), val(cell_size_max), val(nuclei_distance_threshold)
+          val(cell_compactness), val(max_transcript_nucleus_distance),
+          val(voxel_size), val(diffusion_probability)
 
     output:
     tuple val(meta), val("proseg"),
@@ -20,28 +20,39 @@ process PROSEG_FULL {
 
     script:
     """
-    proseg xenium ${transcripts} \\
-        --cell-polygons              cell_polygons.geojson.gz \\
-        --transcript-assignments     transcript_assignments.csv \\
-        --cell-metadata              cell_metadata.csv \\
-        --expected-counts            expected_counts.csv \\
-        --cell-perimeter-ratio-threshold ${cell_perimeter_ratio_threshold} \\
-        --cell-aspect-ratio-limit        ${cell_aspect_ratio_limit} \\
-        --cell-size-min                  ${cell_size_min} \\
-        --cell-size-max                  ${cell_size_max} \\
-        --nuclei-distance-threshold      ${nuclei_distance_threshold}
+    proseg --xenium ${transcripts} \\
+        --output-cell-polygons      cell_polygons.geojson.gz \\
+        --output-transcript-metadata transcript_metadata.parquet \\
+        --output-cell-metadata      cell_metadata.parquet \\
+        --output-expected-counts    expected_counts.parquet \\
+        --cell-compactness          ${cell_compactness} \\
+        --max-transcript-nucleus-distance ${max_transcript_nucleus_distance} \\
+        --voxel-size                ${voxel_size} \\
+        --diffusion-probability     ${diffusion_probability} \\
+        --ignore-z-coord
 
     python3 - <<'PYEOF'
 import pandas as pd, sys
+
 t = pd.read_parquet("${transcripts}")
-a = pd.read_csv("transcript_assignments.csv")
-if "transcript_id" in a.columns and "transcript_id" in t.columns:
-    t = t.merge(a[["transcript_id", "cell_id"]], on="transcript_id", how="left")
-elif len(a) == len(t):
-    t["cell_id"] = a.iloc[:, -1].values
+m = pd.read_parquet("transcript_metadata.parquet")
+
+print(f"  transcript_metadata columns: {list(m.columns)}", file=sys.stderr)
+
+if "transcript_id" in m.columns and "transcript_id" in t.columns:
+    t = t.merge(m[["transcript_id", "cell_id"]], on="transcript_id", how="left")
+elif "cell_id" in m.columns and len(m) == len(t):
+    t = t.copy()
+    t["cell_id"] = m["cell_id"].values
 else:
-    print("WARNING: transcript assignment join failed", file=sys.stderr)
-    t["cell_id"] = None
+    cell_col = [c for c in m.columns if "cell" in c.lower()]
+    if cell_col:
+        t = t.copy()
+        t["cell_id"] = m[cell_col[0]].values
+    else:
+        print("WARNING: could not find cell assignment column in transcript metadata", file=sys.stderr)
+        t["cell_id"] = None
+
 t.to_parquet("transcripts_assigned.parquet", index=False)
 PYEOF
     """
