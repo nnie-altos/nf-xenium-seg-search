@@ -2,7 +2,7 @@ process SCORE_CROP {
     tag "${meta.id}:${crop_id}:${method}:${param_hash}"
     label 'process_low'
 
-    container 'ghcr.io/altos-labs/xenium-seg-search:0.1.0'
+    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.0'
 
     input:
     tuple val(meta), val(crop_id), val(method), val(param_hash),

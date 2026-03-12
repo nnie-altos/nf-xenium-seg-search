@@ -2,7 +2,7 @@ process GENERATE_REPORT {
     tag "report"
     label 'process_medium'
 
-    container 'ghcr.io/altos-labs/xenium-seg-search:0.1.0'
+    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.0'
 
     publishDir "${params.outdir}", mode: params.publish_dir_mode
 

@@ -81,7 +81,7 @@ Genes are fuzzy-matched against the h5ad `var_names` (case-insensitive, ignoring
 
 | Process | Container |
 |---------|-----------|
-| Python scripts | `ghcr.io/altos-labs/xenium-seg-search:0.1.0` (see `Dockerfile`) |
+| Python scripts | `ghcr.io/nnie-altos/xenium-seg-search:0.1.0` (see `Dockerfile`) |
 | ProSeg | `ghcr.io/dcjones/proseg:v3.1.0` |
 | Cellpose | `ghcr.io/mouseland/cellpose:3.0.11` |
 | SEGGER | `danielunyi42/segger_cuda118_py311:latest` |
@@ -89,7 +89,7 @@ Genes are fuzzy-matched against the h5ad `var_names` (case-insensitive, ignoring
 
 Build the custom container:
 ```bash
-docker build -t ghcr.io/altos-labs/xenium-seg-search:0.1.0 .
+docker build -t ghcr.io/nnie-altos/xenium-seg-search:0.1.0 .
 ```
 
 ## Output structure
