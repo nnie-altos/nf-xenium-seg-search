@@ -1,0 +1,182 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 1: Parameter grid search on density-stratified crops
+// ─────────────────────────────────────────────────────────────────────────────
+
+include { GENERATE_PARAM_COMBOS } from '../modules/local/generate_param_combos/main'
+include { SELECT_CROPS          } from '../modules/local/select_crops/main'
+include { CROP_TRANSCRIPTS      } from '../modules/local/crop_transcripts/main'
+include { CROP_IMAGE            } from '../modules/local/crop_image/main'
+include { PROSEG_CROP           } from '../modules/local/proseg_crop/main'
+include { CELLPOSE_CROP         } from '../modules/local/cellpose_crop/main'
+include { SEGGER_PREDICT_CROP   } from '../modules/local/segger_predict_crop/main'
+include { XR_GRIDSEARCH         } from '../modules/local/xr_gridsearch/main'
+include { SCORE_CROP            } from '../modules/local/score_crop/main'
+include { SELECT_OPTIMAL_PARAMS } from '../modules/local/select_optimal_params/main'
+
+workflow STAGE1_GRID_SEARCH {
+    take:
+    ch_samples          // [meta, transcripts, nucleus_boundaries, morphology_tif, xenium_bundle, xoa_version]
+    ch_param_grids      // path: param_grids.yaml
+    segger_model        // path or null
+    n_crops             // int
+    crop_size_um        // float (µm)
+    pixel_size_um       // float
+
+    main:
+
+    // ── Generate param combinations ──────────────────────────────────────────
+    GENERATE_PARAM_COMBOS(ch_param_grids)
+
+    // ── Parse per-method param TSVs into channels of param-tuples ────────────
+    def tsvs = GENERATE_PARAM_COMBOS.out.param_tsvs.flatten()
+
+    ch_proseg_params = tsvs
+        .filter { it.name.startsWith("proseg") }
+        .splitCsv(header: true, sep: '\t')
+        .map { row -> tuple(
+            row.param_hash,
+            row.cell_perimeter_ratio_threshold as Float,
+            row.cell_aspect_ratio_limit         as Float,
+            row.cell_size_min                   as Float,
+            row.cell_size_max                   as Float,
+            row.nuclei_distance_threshold       as Float
+        )}
+
+    ch_cellpose_params = tsvs
+        .filter { it.name.startsWith("cellpose") }
+        .splitCsv(header: true, sep: '\t')
+        .map { row -> tuple(
+            row.param_hash,
+            row.diameter        as Float,
+            row.flow_threshold  as Float,
+            row.sharpen_tiff ?: 'false'
+        )}
+
+    ch_segger_params = tsvs
+        .filter { it.name.startsWith("segger") }
+        .splitCsv(header: true, sep: '\t')
+        .map { row -> tuple(
+            row.param_hash,
+            row.min_transcripts_per_cell as Integer,
+            row.tile_size                as Integer
+        )}
+
+    ch_xr_params = tsvs
+        .filter { it.name.startsWith("xr") }
+        .splitCsv(header: true, sep: '\t')
+        .map { row -> tuple(
+            row.param_hash,
+            row.expansion_distance as Float,
+            row.dapi_filter        as Float,
+            row.boundary_stain ?: 'false'
+        )}
+
+    // ── Split sample channel by component ────────────────────────────────────
+    ch_meta_tx      = ch_samples.map { meta, tx, nuc, img, bun, ver -> tuple(meta, tx) }
+    ch_meta_nucleus = ch_samples.map { meta, tx, nuc, img, bun, ver -> tuple(meta, nuc) }
+    ch_meta_image   = ch_samples.map { meta, tx, nuc, img, bun, ver -> tuple(meta, img) }
+    ch_meta_bundle  = ch_samples.map { meta, tx, nuc, img, bun, ver -> tuple(meta, bun) }
+    ch_meta_ver     = ch_samples.map { meta, tx, nuc, img, bun, ver -> tuple(meta, ver) }
+
+    // ── Select density-stratified crops ──────────────────────────────────────
+    SELECT_CROPS(ch_meta_nucleus, n_crops, crop_size_um, pixel_size_um)
+    ch_crops = SELECT_CROPS.out.crops  // [meta, crops.csv]
+
+    // ── Crop transcripts ──────────────────────────────────────────────────────
+    CROP_TRANSCRIPTS(
+        ch_meta_tx.join(ch_crops).map { meta, tx, crops -> tuple(meta, tx, crops) }
+    )
+    // Flatten list of per-crop parquets to individual [meta, crop_id, transcripts] tuples
+    ch_cropped_tx = CROP_TRANSCRIPTS.out.cropped_transcripts
+        .transpose()
+        .map { meta, tx ->
+            def crop_id = tx.name.replaceFirst(/_transcripts\.parquet$/, '')
+            tuple(meta, crop_id, tx)
+        }
+
+    // ── Crop images ───────────────────────────────────────────────────────────
+    CROP_IMAGE(
+        ch_meta_image.join(ch_crops).map { meta, img, crops -> tuple(meta, img, crops) }
+    )
+    ch_cropped_img = CROP_IMAGE.out.cropped_images
+        .transpose()
+        .map { meta, img ->
+            def crop_id = img.name.replaceFirst(/_morphology\.tif$/, '')
+            tuple(meta, crop_id, img)
+        }
+
+    // ── Compute crop area in mm² ──────────────────────────────────────────────
+    def crop_size_mm  = crop_size_um.toFloat() / 1000.0
+    def crop_area_mm2 = crop_size_mm * crop_size_mm
+
+    // ── ProSeg crop grid search ───────────────────────────────────────────────
+    PROSEG_CROP(
+        ch_cropped_tx.combine(ch_proseg_params)
+            .map { meta, crop_id, tx, ph, cprt, carl, csmin, csmax, ndt ->
+                tuple(meta, crop_id, tx, ph, cprt, carl, csmin, csmax, ndt)
+            }
+    )
+
+    // ── Cellpose crop grid search ─────────────────────────────────────────────
+    // Join tx + img + crops_csv by (meta, crop_id) then cross with params.
+    // crops.csv is joined by meta so each sample uses its own crops.csv.
+    ch_tx_img_csv = ch_cropped_tx
+        .join(ch_cropped_img, by: [0, 1])           // [meta, crop_id, tx, img]
+        .join(ch_crops.map { meta, csv -> [meta, csv] }, by: 0)  // add crops.csv keyed by meta
+        // → [meta, crop_id, tx, img, crops.csv]
+
+    CELLPOSE_CROP(
+        ch_tx_img_csv.combine(ch_cellpose_params)
+            .map { meta, crop_id, tx, img, crops_csv, ph, diam, flow, sharpen ->
+                tuple(meta, crop_id, tx, img, crops_csv, ph, diam, flow, sharpen)
+            },
+        pixel_size_um
+    )
+
+    // ── SEGGER crop grid search (optional — only if model provided) ───────────
+    ch_segger_results = Channel.empty()
+    if (segger_model) {
+        SEGGER_PREDICT_CROP(
+            ch_cropped_tx.combine(ch_segger_params)
+                .map { meta, crop_id, tx, ph, min_tx, tile ->
+                    tuple(meta, crop_id, tx, ph, min_tx, tile)
+                },
+            file(segger_model)
+        )
+        ch_segger_results = SEGGER_PREDICT_CROP.out.results
+    }
+
+    // ── XeniumRanger grid search (XOA3 only — full-slide) ────────────────────
+    ch_xr3_bundles = ch_meta_bundle
+        .join(ch_meta_ver, by: 0)
+        .filter { meta, bundle, ver -> ver.toString() == '3' }
+        .map   { meta, bundle, _ver -> tuple(meta, bundle) }
+
+    XR_GRIDSEARCH(
+        ch_xr3_bundles.combine(ch_xr_params)
+            .map { meta, bundle, ph, exp, dapi, bdry ->
+                tuple(meta, bundle, ph, exp, dapi, bdry)
+            }
+    )
+
+    // ── Mix all segmentation results and score ────────────────────────────────
+    // All results share the same tuple shape:
+    // [meta, crop_id, method, param_hash, cells_file, transcripts_assigned]
+    ch_all_seg = PROSEG_CROP.out.results
+        .mix(CELLPOSE_CROP.out.results)
+        .mix(ch_segger_results)
+        .mix(XR_GRIDSEARCH.out.results)
+
+    SCORE_CROP(ch_all_seg, crop_area_mm2)
+
+    // ── Collect all scores and select optimal params ──────────────────────────
+    SELECT_OPTIMAL_PARAMS(
+        SCORE_CROP.out.score.collect(),
+        GENERATE_PARAM_COMBOS.out.manifest
+    )
+
+    emit:
+    optimal_params = SELECT_OPTIMAL_PARAMS.out.optimal_params
+    scores_summary = SELECT_OPTIMAL_PARAMS.out.scores_summary
+    crops          = ch_crops
+}

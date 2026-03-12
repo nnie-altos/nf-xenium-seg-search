@@ -1,0 +1,42 @@
+# Parameter grid definitions for Stage 1 grid search.
+# Each method lists its searchable parameters and the values to test.
+# All combinations are generated as a factorial grid (unless noted).
+
+proseg:
+  # Perimeter compactness threshold: higher = reject more elongated/irregular cells
+  cell_perimeter_ratio_threshold: [0.3, 0.4, 0.5]
+  # Maximum cell aspect ratio allowed
+  cell_aspect_ratio_limit: [6.0, 8.0, 10.0]
+  # Minimum and maximum cell area (in µm²)
+  cell_size_min: [30, 50, 75]
+  cell_size_max: [4000, 6000, 8000]
+  # Maximum nucleus-to-nucleus distance for multi-nuclei splitting
+  nuclei_distance_threshold: [20, 25, 30]
+  # Reduce to representative subset to keep total combos manageable:
+  # Full factorial = 3×3×3×3×3 = 243 — use Latin-hypercube sampling to ~36 combos
+  max_combinations: 36
+
+cellpose:
+  # Expected cell diameter in pixels (0.2125 µm/px → 30px ≈ 6.4 µm)
+  diameter: [20, 30, 40]
+  # Flow error threshold for cell filtering (0 = strictest)
+  flow_threshold: [0.0, 0.4, 0.8]
+  # Whether to apply RESOLIFT sharpening before segmentation
+  sharpen_tiff: [false, true]
+  # Full factorial: 3×3×2 = 18 combos
+
+segger:
+  # Minimum transcripts per cell to retain a cell
+  min_transcripts_per_cell: [3, 5, 10]
+  # Spatial tile width/height for graph construction (microns)
+  tile_size: [80, 120, 160]
+  # Full factorial: 3×3 = 9 combos
+
+xr:
+  # Nuclear expansion distance in microns
+  expansion_distance: [3, 5, 8]
+  # Minimum DAPI peak intensity for nucleus detection
+  dapi_filter: [50, 100, 150]
+  # Whether to use boundary stain (ATP1A1/E-Cadherin/CD45)
+  boundary_stain: [true, false]
+  # Full factorial: 3×3×2 = 18 combos

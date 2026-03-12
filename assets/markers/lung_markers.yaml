@@ -1,0 +1,16 @@
+# Lung marker genes for MECR scoring.
+# Source: 11.MECR_lung.ipynb — stricter set used in get_mecr() default.
+# Format: gene_name: cell_type
+# Only genes present in adata.var_names will be used; missing genes are skipped with a warning.
+# Requires >= 4 genes to be found for a valid MECR score.
+
+markers:
+  Rtkn2: AT1
+  Clic5: AT1
+  Akap5: AT1
+  Trp63: Basal
+  Krt5: Basal
+  Dnah12: Ciliated
+  Tmem212: Ciliated
+  Slc34a2: AT2
+  Il33: AT2

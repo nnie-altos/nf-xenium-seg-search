@@ -1,0 +1,17 @@
+process CROP_TRANSCRIPTS {
+    tag "${meta.id}"
+    label 'process_low'
+
+    container 'ghcr.io/altos-labs/xenium-seg-search:0.1.0'
+
+    input:
+    tuple val(meta), path(transcripts), path(crops_csv)
+
+    output:
+    tuple val(meta), path("*_transcripts.parquet"), emit: cropped_transcripts
+
+    script:
+    """
+    crop_transcripts.py ${crops_csv} ${transcripts}
+    """
+}
