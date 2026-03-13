@@ -13,6 +13,7 @@ process CELLPOSE_CROP {
     tuple val(meta), val(crop_id), path(transcripts), path(image), path(crops_csv),
           val(param_hash), val(diameter), val(flow_threshold), val(sharpen_tiff)
     val pixel_size_um
+    val nucleus_segmentation_only
 
     output:
     tuple val(meta), val(crop_id), val("cellpose"), val(param_hash),
@@ -40,10 +41,11 @@ SHARP
         INPUT_IMG="${image}"
     fi
 
-    # Run Cellpose segmentation
+    # Run Cellpose segmentation (cyto3 for full cells, nuclei for nucleus-only mode)
+    CELLPOSE_MODEL="${nucleus_segmentation_only}" == "true" ? "nuclei" : "cyto3"
     python3 -m cellpose \\
         --image_path \${INPUT_IMG} \\
-        --pretrained_model cyto3 \\
+        --pretrained_model \${CELLPOSE_MODEL} \\
         --diameter ${diameter} \\
         --flow_threshold ${flow_threshold} \\
         --no_npy \\

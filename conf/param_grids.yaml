@@ -1,40 +1,82 @@
 # Parameter grid definitions for Stage 1 grid search.
-# Each method lists its searchable parameters and the values to test.
-# All combinations are generated as a factorial grid (unless noted).
+#
+# search_strategy (set via --search_strategy):
+#   grid              (default) Full factorial grid, with optional Latin-hypercube
+#                     downsampling via max_combinations. More thorough.
+#   coordinate_descent One-at-a-time: each parameter is varied across its values
+#                     while all others are held at their 'default'. Reduces
+#                     N×M×O trials to 1 + (N-1) + (M-1) + (O-1). Faster but
+#                     may miss parameter interactions.
+#
+# crop_size_um (set via --crop_size_um):
+#   small:   250 µm  — fine-grained crops, good for dense tissue
+#   default: 500 µm
+#   large:   1000 µm — larger context, good for sparse tissue
 
 proseg:
-  # Cell shape compactness penalty: lower = more elongated cells allowed (default: 0.04)
+  defaults:
+    cell_compactness: 0.04
+    max_transcript_nucleus_distance: 60
+    voxel_size: 1.0
+    diffusion_probability: 0.2
+  # Cell shape compactness penalty: lower = more elongated cells allowed
   cell_compactness: [0.02, 0.04, 0.08]
-  # Max distance a transcript can be from any nucleus to be included (µm, default: 60)
+  # Max distance a transcript can be from any nucleus to be included (µm)
   max_transcript_nucleus_distance: [30, 60, 100]
-  # Voxel resolution for segmentation (µm, default: 1.0)
+  # Voxel resolution for segmentation (µm)
   voxel_size: [0.5, 1.0, 2.0]
-  # Probability of transcript diffusion model (default: 0.2)
+  # Probability of transcript diffusion model
   diffusion_probability: [0.1, 0.2, 0.4]
-  # Full factorial: 3×3×3×3 = 81 — use Latin-hypercube sampling to ~27 combos
+  # Grid: 3×3×3×3 = 81 — Latin-hypercube sampled to 27
+  # Coordinate descent: 1 + 2+2+2+2 = 9
   max_combinations: 27
 
 cellpose:
-  # Expected cell diameter in pixels (0.2125 µm/px → 30px ≈ 6.4 µm)
-  diameter: [20, 30, 40]
-  # Flow error threshold for cell filtering (0 = strictest)
+  defaults:
+    diameter: 30
+    flow_threshold: 0.4
+    sharpen_tiff: false
+  # Cell diameter in pixels — two grids; generate_param_combos.py selects based on
+  # --nucleus-segmentation-only flag (0.2125 µm/px: cell 20-40px ≈ 4-8.5µm; nucleus 10-20px ≈ 2-4µm)
+  diameter_cell:    [20, 30, 40]
+  diameter_nucleus: [10, 15, 20]
+  # Flow error threshold for cell/nucleus filtering (0 = strictest)
   flow_threshold: [0.0, 0.4, 0.8]
   # Whether to apply RESOLIFT sharpening before segmentation
   sharpen_tiff: [false, true]
-  # Full factorial: 3×3×2 = 18 combos
+  # Grid: 3×3×2 = 18
+  # Coordinate descent: 1 + 2+2+1 = 6
 
 segger:
-  # Minimum transcripts per cell to retain a cell
-  min_transcripts_per_cell: [3, 5, 10]
-  # Spatial tile width/height for graph construction (microns)
+  defaults:
+    min_transcripts_per_cell: 25
+    d_max: 2.0
+    tile_size: 120
+  # Minimum transcripts per cell to retain a cell (post-processing filter)
+  min_transcripts_per_cell: [10, 25, 50]
+  # Maximum distance (µm) for transcript-to-nucleus edges in spatial graph construction
+  # NOTE: requires d_max to be exposed in the SEGGER create_dataset module
+  d_max: [1.5, 2.0, 2.5]
+  # Spatial tile width/height for graph construction (µm)
   tile_size: [80, 120, 160]
-  # Full factorial: 3×3 = 9 combos
+  # Grid: 3×3×3 = 27
+  # Coordinate descent: 1 + 2+2+2 = 7
 
-xr:
-  # Nuclear expansion distance in microns
-  expansion_distance: [3, 5, 8]
-  # Minimum DAPI peak intensity for nucleus detection
-  dapi_filter: [50, 100, 150]
-  # Whether to use boundary stain (ATP1A1/E-Cadherin/CD45)
-  boundary_stain: [true, false]
-  # Full factorial: 3×3×2 = 18 combos
+cellpose_baysor:
+  defaults:
+    prior_segmentation_confidence: 0.5
+    min_molecules_per_cell: 50
+  # How much Baysor trusts the Cellpose prior vs transcript signal (0=ignore prior, 1=fully trust)
+  prior_segmentation_confidence: [0.3, 0.5, 0.7]
+  # Minimum transcripts per cell to retain a cell (Baysor post-processing)
+  min_molecules_per_cell: [25, 50, 75]
+  # Grid: 3×3 = 9
+  # Coordinate descent: 1 + 2+2 = 5
+  # Note: Cellpose params (diameter, flow_threshold, sharpen_tiff) are inherited from
+  # optimal Cellpose Stage 1 results. Baysor scale is set equal to optimal Cellpose diameter.
+  # Under --nucleus_segmentation_only, Cellpose runs in nucleus mode and Baysor uses the
+  # nucleus mask as prior; scale inherits the (smaller) nucleus diameter automatically.
+
+# XeniumRanger is not grid-searched. It runs once at default XOA3 parameters (or
+# user-specified via --xr_expansion_distance, --xr_dapi_filter, --xr_boundary_stain)
+# as a fixed baseline, XOA3 samples only.

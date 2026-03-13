@@ -93,7 +93,9 @@ workflow {
             params.segger_model ? file(params.segger_model) : null,
             params.n_crops,
             params.crop_size_um,
-            params.pixel_size_um
+            params.pixel_size_um,
+            params.search_strategy,
+            params.nucleus_segmentation_only
         )
 
         ch_optimal_params  = STAGE1_GRID_SEARCH.out.optimal_params
@@ -127,7 +129,8 @@ workflow {
         params.mecr_weight,
         params.recovery_weight,
         params.yield_weight,
-        params.pixel_size_um
+        params.pixel_size_um,
+        params.nucleus_segmentation_only
     )
 }
 

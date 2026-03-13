@@ -11,15 +11,16 @@ include { GENERATE_REPORT } from '../modules/local/generate_report/main'
 
 workflow STAGE2_FULL_SCALE {
     take:
-    ch_samples          // [meta, transcripts, nucleus_boundaries, morphology_tif, xenium_bundle, h5ad, xoa_version]
-    ch_optimal_params   // path: optimal_params.json
-    ch_scores_summary   // path: scores_summary.csv
-    markers_yaml        // path: markers.yaml
-    segger_model        // path or null
+    ch_samples                // [meta, transcripts, nucleus_boundaries, morphology_tif, xenium_bundle, h5ad, xoa_version]
+    ch_optimal_params         // path: optimal_params.json
+    ch_scores_summary         // path: scores_summary.csv
+    markers_yaml              // path: markers.yaml
+    segger_model              // path or null
     mecr_weight
     recovery_weight
     yield_weight
     pixel_size_um
+    nucleus_segmentation_only // bool
 
     main:
 
@@ -87,7 +88,8 @@ workflow STAGE2_FULL_SCALE {
             .map { meta, tx, img, diam, flow, sharpen ->
                 tuple(meta, tx, img, diam, flow, sharpen)
             },
-        pixel_size_um
+        pixel_size_um,
+        nucleus_segmentation_only
     )
 
     // ── SEGGER full-scale (optional) ──────────────────────────────────────────
@@ -111,7 +113,8 @@ workflow STAGE2_FULL_SCALE {
         ch_xr3_bundles.combine(ch_xr_opt)
             .map { meta, bundle, exp, dapi, bdry ->
                 tuple(meta, bundle, exp, dapi, bdry)
-            }
+            },
+        nucleus_segmentation_only
     )
 
     // ── Baseline scoring (XOA outputs from nf-xenium-processing) ─────────────

@@ -11,17 +11,18 @@ process XR_FULL {
     input:
     tuple val(meta), path(xenium_bundle),
           val(expansion_distance), val(dapi_filter), val(boundary_stain)
+    val nucleus_segmentation_only
 
     output:
     tuple val(meta), val("xr"),
-          path("xr_output/outs/cell_boundaries.parquet"),
-          path("xr_output/outs/transcripts.parquet"),
+          path("final_output/cell_boundaries.parquet"),
+          path("final_output/transcripts.parquet"),
           emit: results
 
     script:
-    // Default behaviour includes boundary stain; explicitly disable when not wanted
     def boundary_stain_flag = boundary_stain.toString() == 'false' ? '--boundary-stain=disable' : ''
     """
+    # ── Step 1: resegment (always) ───────────────────────────────────────────
     xeniumranger resegment \\
         --id            xr_output \\
         --xenium-bundle ${xenium_bundle} \\
@@ -30,9 +31,29 @@ process XR_FULL {
         ${boundary_stain_flag} \\
         --localcores    ${task.cpus} \\
         --localmem      ${task.memory.toGiga()}
+
+    # ── Step 2: nucleus-only mode — import-segmentation ──────────────────────
+    if [ "${nucleus_segmentation_only}" = "true" ]; then
+        xeniumranger import-segmentation \\
+            --id            xr_import_output \\
+            --xenium-bundle ${xenium_bundle} \\
+            --nuclei        xr_output/outs/cells.zarr.zip \\
+            --expansion-distance ${expansion_distance} \\
+            --units         pixels \\
+            --localcores    ${task.cpus} \\
+            --localmem      ${task.memory.toGiga()}
+        mkdir -p final_output
+        cp xr_import_output/outs/cell_boundaries.parquet final_output/
+        cp xr_import_output/outs/transcripts.parquet     final_output/
+    else
+        mkdir -p final_output
+        cp xr_output/outs/cell_boundaries.parquet final_output/
+        cp xr_output/outs/transcripts.parquet     final_output/
+    fi
     """
     stub:
     """
-    mkdir -p xr_output/outs && touch xr_output/outs/cell_boundaries.parquet xr_output/outs/transcripts.parquet
+    mkdir -p final_output
+    touch final_output/cell_boundaries.parquet final_output/transcripts.parquet
     """
 }

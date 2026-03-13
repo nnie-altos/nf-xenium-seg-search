@@ -12,6 +12,7 @@ process CELLPOSE_FULL {
     tuple val(meta), path(transcripts), path(morphology_tif),
           val(diameter), val(flow_threshold), val(sharpen_tiff)
     val pixel_size_um
+    val nucleus_segmentation_only
 
     output:
     tuple val(meta), val("cellpose"),
@@ -40,9 +41,11 @@ SHARP
         INPUT_IMG="${morphology_tif}"
     fi
 
+    # Run Cellpose segmentation (cyto3 for full cells, nuclei for nucleus-only mode)
+    CELLPOSE_MODEL="${nucleus_segmentation_only}" == "true" ? "nuclei" : "cyto3"
     python3 -m cellpose \\
         --image_path \${INPUT_IMG} \\
-        --pretrained_model cyto3 \\
+        --pretrained_model \${CELLPOSE_MODEL} \\
         --diameter ${diameter} \\
         --flow_threshold ${flow_threshold} \\
         --no_npy \\

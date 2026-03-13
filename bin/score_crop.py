@@ -40,7 +40,8 @@ def load_cell_count(cell_file: str) -> int:
         sys.exit(f"ERROR: Unrecognized cell file format: {cell_file}")
 
 
-def compute_assignment_rate(transcripts_parquet: str) -> float:
+def compute_assignment_rate(transcripts_parquet: str) -> tuple[float, int]:
+    """Returns (assignment_rate, assigned_count)."""
     df = pd.read_parquet(transcripts_parquet)
 
     # Cell ID column may be 'cell_id' or 'overlaps_nucleus'
@@ -60,9 +61,10 @@ def compute_assignment_rate(transcripts_parquet: str) -> float:
                      f"Columns: {list(df.columns)}")
 
     total = len(df)
+    assigned_count = int(assigned.sum())
     if total == 0:
-        return 0.0
-    return float(assigned.sum()) / total
+        return 0.0, 0
+    return float(assigned_count) / total, assigned_count
 
 
 def score_crop(
@@ -74,11 +76,13 @@ def score_crop(
     crop_area_mm2: float,
     ref_density: float = 1000.0,  # expected cells/mm²
 ) -> dict:
-    assignment_rate = compute_assignment_rate(transcripts_parquet)
+    assignment_rate, assigned_count = compute_assignment_rate(transcripts_parquet)
     cell_count = load_cell_count(cell_file)
 
     expected_cells = ref_density * crop_area_mm2
     cell_yield_norm = min(cell_count / expected_cells, 1.0) if expected_cells > 0 else 0.0
+
+    mean_transcripts_per_cell = round(assigned_count / cell_count, 2) if cell_count > 0 else 0.0
 
     composite = 0.6 * assignment_rate + 0.4 * cell_yield_norm
 
@@ -90,6 +94,7 @@ def score_crop(
         "assignment_rate": round(assignment_rate, 4),
         "cell_count": cell_count,
         "cell_yield_norm": round(cell_yield_norm, 4),
+        "mean_transcripts_per_cell": mean_transcripts_per_cell,
         "composite_score": round(composite, 4),
     }
     print(json.dumps(result, indent=2), file=sys.stderr)

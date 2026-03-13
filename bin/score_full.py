@@ -105,14 +105,16 @@ def get_mecr(adata, marker_dict: dict) -> float:
     return mecr
 
 
-def compute_assignment_rate(transcripts_parquet: str) -> float:
+def compute_assignment_rate(transcripts_parquet: str) -> tuple[float, int]:
+    """Returns (assignment_rate, assigned_count)."""
     df = pd.read_parquet(transcripts_parquet)
     for col in ["cell_id", "cell", "assignment"]:
         if col in df.columns:
             assigned = df[col].notna() & (df[col] != "UNASSIGNED") & (df[col] != "") & (df[col] != 0)
-            return float(assigned.sum()) / max(len(df), 1)
+            assigned_count = int(assigned.sum())
+            return float(assigned_count) / max(len(df), 1), assigned_count
     print(f"  WARNING: No cell assignment column found in {transcripts_parquet}", file=sys.stderr)
-    return 0.0
+    return 0.0, 0
 
 
 def compute_cell_count(cells_path: str) -> int:
@@ -145,8 +147,9 @@ def main():
 
     # Compute metrics
     mecr = get_mecr(adata, marker_dict)
-    assignment_rate = compute_assignment_rate(args.transcripts)
+    assignment_rate, assigned_count = compute_assignment_rate(args.transcripts)
     cell_count = compute_cell_count(args.cells)
+    mean_transcripts_per_cell = round(assigned_count / cell_count, 2) if cell_count > 0 else 0.0
 
     # Yield normalization: relative to baseline if provided, else 1.0
     if args.baseline_cell_count and args.baseline_cell_count > 0:
@@ -172,6 +175,7 @@ def main():
         "mecr_score": round(mecr_score, 4),
         "assignment_rate": round(assignment_rate, 4),
         "cell_count": cell_count,
+        "mean_transcripts_per_cell": mean_transcripts_per_cell,
         "yield_norm": round(yield_norm, 4),
         "composite_score": round(composite, 4),
         "mecr_weight": w_mecr,

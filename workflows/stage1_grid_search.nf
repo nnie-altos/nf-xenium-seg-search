@@ -2,30 +2,34 @@
 // Stage 1: Parameter grid search on density-stratified crops
 // ─────────────────────────────────────────────────────────────────────────────
 
-include { GENERATE_PARAM_COMBOS } from '../modules/local/generate_param_combos/main'
-include { SELECT_CROPS          } from '../modules/local/select_crops/main'
-include { CROP_TRANSCRIPTS      } from '../modules/local/crop_transcripts/main'
-include { CROP_IMAGE            } from '../modules/local/crop_image/main'
-include { PROSEG_CROP           } from '../modules/local/proseg_crop/main'
-include { CELLPOSE_CROP         } from '../modules/local/cellpose_crop/main'
-include { SEGGER_PREDICT_CROP   } from '../modules/local/segger_predict_crop/main'
-include { XR_GRIDSEARCH         } from '../modules/local/xr_gridsearch/main'
-include { SCORE_CROP            } from '../modules/local/score_crop/main'
-include { SELECT_OPTIMAL_PARAMS } from '../modules/local/select_optimal_params/main'
+include { GENERATE_PARAM_COMBOS  } from '../modules/local/generate_param_combos/main'
+include { SELECT_CROPS           } from '../modules/local/select_crops/main'
+include { CROP_TRANSCRIPTS       } from '../modules/local/crop_transcripts/main'
+include { CROP_IMAGE             } from '../modules/local/crop_image/main'
+include { PROSEG_CROP            } from '../modules/local/proseg_crop/main'
+include { CELLPOSE_CROP          } from '../modules/local/cellpose_crop/main'
+include { SEGGER_PREDICT_CROP    } from '../modules/local/segger_predict_crop/main'
+include { XR_GRIDSEARCH          } from '../modules/local/xr_gridsearch/main'
+include { SCORE_CROP             } from '../modules/local/score_crop/main'
+include { SELECT_OPTIMAL_PARAMS  } from '../modules/local/select_optimal_params/main'
+include { RENDER_CROP_OVERLAY    } from '../modules/local/render_crop_overlay/main'
+include { GENERATE_GRID_REPORT   } from '../modules/local/generate_grid_report/main'
 
 workflow STAGE1_GRID_SEARCH {
     take:
-    ch_samples          // [meta, transcripts, nucleus_boundaries, morphology_tif, xenium_bundle, xoa_version]
-    ch_param_grids      // path: param_grids.yaml
-    segger_model        // path or null
-    n_crops             // int
-    crop_size_um        // float (µm)
-    pixel_size_um       // float
+    ch_samples                // [meta, transcripts, nucleus_boundaries, morphology_tif, xenium_bundle, xoa_version]
+    ch_param_grids            // path: param_grids.yaml
+    segger_model              // path or null
+    n_crops                   // int
+    crop_size_um              // float (µm)
+    pixel_size_um             // float
+    search_strategy           // string: 'grid' or 'coordinate_descent'
+    nucleus_segmentation_only // bool
 
     main:
 
     // ── Generate param combinations ──────────────────────────────────────────
-    GENERATE_PARAM_COMBOS(ch_param_grids)
+    GENERATE_PARAM_COMBOS(ch_param_grids, search_strategy, nucleus_segmentation_only)
 
     // ── Parse per-method param TSVs into channels of param-tuples ────────────
     def tsvs = GENERATE_PARAM_COMBOS.out.param_tsvs.flatten()
@@ -129,7 +133,8 @@ workflow STAGE1_GRID_SEARCH {
             .map { meta, crop_id, tx, img, crops_csv, ph, diam, flow, sharpen ->
                 tuple(meta, crop_id, tx, img, crops_csv, ph, diam, flow, sharpen)
             },
-        pixel_size_um
+        pixel_size_um,
+        nucleus_segmentation_only
     )
 
     // ── SEGGER grid search (optional — only if model provided) ───────────────
@@ -177,8 +182,23 @@ workflow STAGE1_GRID_SEARCH {
         GENERATE_PARAM_COMBOS.out.manifest
     )
 
+    // ── Render per-combo overlays (DAPI + cell boundaries coloured by tx count) ─
+    // Join segmentation results with their crop images by (meta, crop_id)
+    ch_overlay_inputs = ch_all_seg
+        .join(ch_cropped_img, by: [0, 1])
+        // → [meta, crop_id, method, param_hash, cells, tx, morphology_tif]
+
+    RENDER_CROP_OVERLAY(ch_overlay_inputs)
+
+    // ── Assemble grid search HTML report ─────────────────────────────────────
+    GENERATE_GRID_REPORT(
+        SCORE_CROP.out.score.collect(),
+        RENDER_CROP_OVERLAY.out.png.collect()
+    )
+
     emit:
-    optimal_params = SELECT_OPTIMAL_PARAMS.out.optimal_params
-    scores_summary = SELECT_OPTIMAL_PARAMS.out.scores_summary
-    crops          = ch_crops
+    optimal_params    = SELECT_OPTIMAL_PARAMS.out.optimal_params
+    scores_summary    = SELECT_OPTIMAL_PARAMS.out.scores_summary
+    crops             = ch_crops
+    grid_report       = GENERATE_GRID_REPORT.out.report
 }
