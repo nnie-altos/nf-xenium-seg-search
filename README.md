@@ -8,7 +8,7 @@ Takes the outputs of [nf-xenium-processing](https://github.com/altos-labs/nf-xen
 
 **Stage 1 — Parameter grid search** on density-stratified spatial crops:
 - Selects `n_crops` × `crop_size_um` µm crops proportionally from low / mid / high density regions
-- Runs ProSeg, Cellpose, and SEGGER (optional) with all parameter combinations (full grid or coordinate descent)
+- Runs ProSeg, Cellpose, Cellpose+Baysor, and SEGGER (optional) with all parameter combinations (full grid or coordinate descent)
 - XeniumRanger resegment (XOA3 only) runs as a fixed baseline — not grid-searched
 - Scores each combination by: transcript assignment rate (60%) + normalised cell yield (40%); reports mean transcripts/cell as a diagnostic
 - Selects the best parameter set per method and generates an HTML grid search report with DAPI + boundary overlays
@@ -89,6 +89,7 @@ Genes are fuzzy-matched against the h5ad `var_names` (case-insensitive, ignoring
 | ProSeg | `ghcr.io/dcjones/proseg:v3.1.0` |
 | Cellpose | `ghcr.io/mouseland/cellpose:3.0.11` |
 | SEGGER | `danielunyi42/segger_cuda118_py311:latest` |
+| Baysor | `khersameesh24/baysor:0.7.1` |
 | XeniumRanger | `nf-core/xeniumranger:4.0` |
 
 Build the custom container:
@@ -110,6 +111,7 @@ results/
 │   │   └── crops.csv
 │   ├── proseg/
 │   ├── cellpose/
+│   ├── cellpose_baysor/
 │   ├── segger/                     # if --segger_model provided
 │   ├── xr/                         # if XOA3 sample
 │   └── scores/
