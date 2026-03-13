@@ -7,10 +7,11 @@ A Nextflow pipeline for automated cell segmentation parameter optimisation and c
 Takes the outputs of [nf-xenium-processing](https://github.com/altos-labs/nf-xenium-processing) as input and performs:
 
 **Stage 1 — Parameter grid search** on density-stratified spatial crops:
-- Selects 10 × 500 µm crops proportionally from low / mid / high density regions
-- Runs ProSeg, Cellpose, SEGGER (optional), and XeniumRanger resegment (XOA3 only) with all parameter combinations
-- Scores each combination by: transcript assignment rate (60%) + normalised cell yield (40%)
-- Selects the best parameter set per method
+- Selects `n_crops` × `crop_size_um` µm crops proportionally from low / mid / high density regions
+- Runs ProSeg, Cellpose, and SEGGER (optional) with all parameter combinations (full grid or coordinate descent)
+- XeniumRanger resegment (XOA3 only) runs as a fixed baseline — not grid-searched
+- Scores each combination by: transcript assignment rate (60%) + normalised cell yield (40%); reports mean transcripts/cell as a diagnostic
+- Selects the best parameter set per method and generates an HTML grid search report with DAPI + boundary overlays
 
 **Stage 2 — Full-slide segmentation** at optimal parameters:
 - Runs all methods at their best parameters on the full slide
@@ -35,17 +36,18 @@ nextflow run main.nf \
 
 ## Samplesheet format
 
-CSV with the following columns:
+CSV with three columns (all other paths are derived automatically):
 
 | Column | Description |
 |--------|-------------|
-| `sample_id` | Unique sample identifier |
-| `transcripts` | Path to `transcripts.parquet` (nf-xenium-processing output) |
-| `nucleus_boundaries` | Path to `nucleus_boundaries.parquet` (from Xenium bundle) |
-| `morphology_tif` | Path to `morphology_focus.ome.tif` (from Xenium bundle) |
-| `xenium_bundle` | Path to full Xenium bundle directory |
-| `experiment_xenium` | Path to `experiment.xenium` (XOA version detection) |
-| `h5ad` | Path to `spatial_with_annotations.h5ad` (nf-xenium-processing output) |
+| `id` | Unique sample identifier |
+| `xenium_bundle` | Path to the Xenium output bundle directory |
+| `nf_outdir` | Output directory of the upstream nf-xenium-processing run |
+
+Derived paths (resolved at runtime):
+- `transcripts.parquet`, `nucleus_boundaries.parquet`, `experiment.xenium` — from `xenium_bundle`
+- `morphology_focus_0000.ome.tif` (XOA3) or `ch0000_dapi.ome.tif` (XOA4) — detected automatically
+- `spatial_with_annotations.h5ad` — from `${nf_outdir}/${id}/${id}/`
 
 ## Parameters
 
@@ -61,6 +63,8 @@ CSV with the following columns:
 | `--mecr_weight` | `0.5` | MECR weight in Stage 2 composite score |
 | `--recovery_weight` | `0.3` | Transcript recovery weight |
 | `--yield_weight` | `0.2` | Cell yield weight |
+| `--search_strategy` | `grid` | Parameter search strategy: `grid` (full factorial) or `coordinate_descent` |
+| `--nucleus_segmentation_only` | `false` | Segment nuclei only (affects Cellpose model/diameter and XR import-segmentation) |
 | `--skip_stage1` | `false` | Skip parameter search; use `--optimal_params` |
 | `--optimal_params` | `null` | Path to `optimal_params.json` from a prior Stage 1 run |
 | `--param_grids` | `conf/param_grids.yaml` | Parameter grid definitions |
@@ -85,7 +89,7 @@ Genes are fuzzy-matched against the h5ad `var_names` (case-insensitive, ignoring
 | ProSeg | `ghcr.io/dcjones/proseg:v3.1.0` |
 | Cellpose | `ghcr.io/mouseland/cellpose:3.0.11` |
 | SEGGER | `danielunyi42/segger_cuda118_py311:latest` |
-| XeniumRanger | `nfcore/xeniumranger:3.1.1` |
+| XeniumRanger | `nf-core/xeniumranger:4.0` |
 
 Build the custom container:
 ```bash
@@ -96,17 +100,18 @@ docker build -t ghcr.io/nnie-altos/xenium-seg-search:0.1.0 .
 
 ```
 results/
-├── pipeline_info/           # Nextflow execution reports
+├── pipeline_info/                  # Nextflow execution reports
 ├── stage1/
-│   ├── optimal_params.json  # Best params per method
-│   └── scores_summary.csv   # All Stage 1 scores
+│   ├── optimal_params.json         # Best params per method
+│   ├── scores_summary.csv          # All Stage 1 scores
+│   └── grid_search_report.html     # Visual report: top/bottom combos per method with DAPI overlays
 ├── {sample_id}/
 │   ├── crops/
 │   │   └── crops.csv
 │   ├── proseg/
 │   ├── cellpose/
-│   ├── segger/              # if --segger_model provided
-│   ├── xr/                  # if XOA3 sample
+│   ├── segger/                     # if --segger_model provided
+│   ├── xr/                         # if XOA3 sample
 │   └── scores/
 │       └── *_score.csv
 └── segmentation_report.html
