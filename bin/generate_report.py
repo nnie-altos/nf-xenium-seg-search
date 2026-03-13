@@ -37,14 +37,15 @@ import tifffile
 # ─────────────────────────────────────────────────────────────────────────────
 
 METHOD_COLORS = {
-    "xoa3":     "#4e79a7",
-    "xoa4":     "#59a14f",
-    "cellpose": "#f28e2b",
-    "proseg":   "#e15759",
-    "segger":   "#76b7b2",
+    "xoa3":            "#4e79a7",
+    "xoa4":            "#59a14f",
+    "cellpose":        "#f28e2b",
+    "cellpose_baysor": "#b07aa1",
+    "proseg":          "#e15759",
+    "segger":          "#76b7b2",
 }
 
-IMAGE_GROUPS = {"xoa3", "xoa4", "cellpose"}
+IMAGE_GROUPS = {"xoa3", "xoa4", "cellpose", "cellpose_baysor"}
 TRANSCRIPT_GROUPS = {"proseg", "segger"}
 
 
