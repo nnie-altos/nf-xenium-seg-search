@@ -2,7 +2,7 @@ process GENERATE_PARAM_COMBOS {
     tag "param_combos"
     label 'process_low'
 
-    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.1'
+    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.2'
 
     input:
     path param_grids_yaml

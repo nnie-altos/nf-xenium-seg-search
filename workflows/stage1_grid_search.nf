@@ -4,8 +4,7 @@
 
 include { GENERATE_PARAM_COMBOS  } from '../modules/local/generate_param_combos/main'
 include { SELECT_CROPS           } from '../modules/local/select_crops/main'
-include { CROP_TRANSCRIPTS       } from '../modules/local/crop_transcripts/main'
-include { CROP_IMAGE             } from '../modules/local/crop_image/main'
+include { CROP_SPATIALDATA       } from '../modules/local/crop_spatialdata/main'
 include { PROSEG_CROP            } from '../modules/local/proseg_crop/main'
 include { CELLPOSE_CROP          } from '../modules/local/cellpose_crop/main'
 include { CELLPOSE_MASK_CROP     } from '../modules/local/cellpose_mask_crop/main'
@@ -97,23 +96,22 @@ workflow STAGE1_GRID_SEARCH {
     SELECT_CROPS(ch_meta_nucleus, n_crops, crop_size_um, pixel_size_um)
     ch_crops = SELECT_CROPS.out.crops  // [meta, crops.csv]
 
-    // ── Crop transcripts ──────────────────────────────────────────────────────
-    CROP_TRANSCRIPTS(
-        ch_meta_tx.join(ch_crops).map { meta, tx, crops -> tuple(meta, tx, crops) }
+    // ── Crop transcripts + images (SpatialData bounding_box_query) ───────────
+    CROP_SPATIALDATA(
+        ch_meta_tx
+            .join(ch_meta_image, by: 0)
+            .join(ch_crops,      by: 0)
+            .map { meta, tx, img, crops -> tuple(meta, tx, img, crops) },
+        pixel_size_um
     )
-    // Flatten list of per-crop parquets to individual [meta, crop_id, transcripts] tuples
-    ch_cropped_tx = CROP_TRANSCRIPTS.out.cropped_transcripts
+    // Flatten lists of per-crop files to individual [meta, crop_id, file] tuples
+    ch_cropped_tx = CROP_SPATIALDATA.out.cropped_transcripts
         .transpose()
         .map { meta, tx ->
             def crop_id = tx.name.replaceFirst(/_transcripts\.parquet$/, '')
             tuple(meta, crop_id, tx)
         }
-
-    // ── Crop images ───────────────────────────────────────────────────────────
-    CROP_IMAGE(
-        ch_meta_image.join(ch_crops).map { meta, img, crops -> tuple(meta, img, crops) }
-    )
-    ch_cropped_img = CROP_IMAGE.out.cropped_images
+    ch_cropped_img = CROP_SPATIALDATA.out.cropped_images
         .transpose()
         .map { meta, img ->
             def crop_id = img.name.replaceFirst(/_morphology\.tif$/, '')
