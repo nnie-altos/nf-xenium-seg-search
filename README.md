@@ -105,7 +105,9 @@ results/
 ├── stage1/
 │   ├── optimal_params.json         # Best params per method
 │   ├── scores_summary.csv          # All Stage 1 scores
-│   └── grid_search_report.html     # Visual report: top/bottom combos per method with DAPI overlays
+│   ├── grid_search_report.html     # Visual report: top/bottom combos per method with DAPI overlays
+│   ├── nfxp_params.yaml            # Winning method params as nf-xenium-processing -params-file
+│   └── winner_summary.json         # Machine-readable winner + score summary
 ├── {sample_id}/
 │   ├── crops/
 │   │   └── crops.csv
@@ -115,6 +117,7 @@ results/
 │   ├── segger/                     # if --segger_model provided
 │   ├── xr/                         # if XOA3 sample
 │   └── scores/
-│       └── *_score.csv
+│       ├── *_score.csv
+│       └── *_ap_matrix.csv         # Pairwise IoU-based AP between all methods
 └── segmentation_report.html
 ```

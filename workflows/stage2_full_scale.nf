@@ -10,6 +10,7 @@ include { SEGGER_FULL        } from '../modules/local/segger_full/main'
 include { XR_FULL            } from '../modules/local/xr_full/main'
 include { SCORE_FULL         } from '../modules/local/score_full/main'
 include { SCORE_AP           } from '../modules/local/score_ap/main'
+include { EXPORT_PARAMS      } from '../modules/local/export_params/main'
 include { GENERATE_REPORT    } from '../modules/local/generate_report/main'
 
 workflow STAGE2_FULL_SCALE {
@@ -204,6 +205,13 @@ workflow STAGE2_FULL_SCALE {
         0      // baseline_cell_count: 0 disables yield normalization
     )
 
+    // ── Export winner params as nf-xenium-processing YAML ────────────────────
+    EXPORT_PARAMS(
+        SCORE_FULL.out.score_csv.collect(),
+        ch_optimal_params,
+        nucleus_segmentation_only
+    )
+
     // ── Pairwise AP scoring across methods ────────────────────────────────────
     // Collect [meta, method, cells_file] per sample then group for a single
     // score_ap.py call per sample.
@@ -221,7 +229,9 @@ workflow STAGE2_FULL_SCALE {
     )
 
     emit:
-    report     = GENERATE_REPORT.out.report
-    score_csvs = SCORE_FULL.out.score_csv
-    ap_matrices = SCORE_AP.out.ap_matrix
+    report        = GENERATE_REPORT.out.report
+    score_csvs    = SCORE_FULL.out.score_csv
+    ap_matrices   = SCORE_AP.out.ap_matrix
+    nfxp_params   = EXPORT_PARAMS.out.nfxp_params
+    winner_summary = EXPORT_PARAMS.out.winner_summary
 }
