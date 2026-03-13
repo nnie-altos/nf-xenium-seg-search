@@ -2,12 +2,14 @@
 // Stage 2: Full-scale segmentation at optimal parameters + scoring + report
 // ─────────────────────────────────────────────────────────────────────────────
 
-include { PROSEG_FULL     } from '../modules/local/proseg_full/main'
-include { CELLPOSE_FULL   } from '../modules/local/cellpose_full/main'
-include { SEGGER_FULL     } from '../modules/local/segger_full/main'
-include { XR_FULL         } from '../modules/local/xr_full/main'
-include { SCORE_FULL      } from '../modules/local/score_full/main'
-include { GENERATE_REPORT } from '../modules/local/generate_report/main'
+include { PROSEG_FULL        } from '../modules/local/proseg_full/main'
+include { CELLPOSE_FULL      } from '../modules/local/cellpose_full/main'
+include { CELLPOSE_MASK_FULL } from '../modules/local/cellpose_mask_full/main'
+include { BAYSOR_FULL        } from '../modules/local/baysor_full/main'
+include { SEGGER_FULL        } from '../modules/local/segger_full/main'
+include { XR_FULL            } from '../modules/local/xr_full/main'
+include { SCORE_FULL         } from '../modules/local/score_full/main'
+include { GENERATE_REPORT    } from '../modules/local/generate_report/main'
 
 workflow STAGE2_FULL_SCALE {
     take:
@@ -66,6 +68,13 @@ workflow STAGE2_FULL_SCALE {
             tuple(p.expansion_distance as Float, p.dapi_filter as Float, p.boundary_stain ?: 'false')
         }
 
+    ch_cellpose_baysor_opt = ch_optimal_map
+        .filter { m -> m.containsKey("cellpose_baysor") }
+        .map { m ->
+            def p = m.cellpose_baysor.params
+            tuple(p.prior_segmentation_confidence as Float, p.min_molecules_per_cell as Integer)
+        }
+
     // ── Split sample channel by component ────────────────────────────────────
     ch_meta_tx     = ch_samples.map { meta, tx, nuc, img, bun, h5, ver -> tuple(meta, tx) }
     ch_meta_nuc    = ch_samples.map { meta, tx, nuc, img, bun, h5, ver -> tuple(meta, nuc) }
@@ -117,6 +126,37 @@ workflow STAGE2_FULL_SCALE {
         nucleus_segmentation_only
     )
 
+    // ── Cellpose+Baysor full-scale ────────────────────────────────────────────
+    // CELLPOSE_MASK_FULL runs when cellpose_baysor is in optimal_params (the combined
+    // channel will be empty otherwise and the process won't execute).
+    // scale for Baysor = optimal Cellpose diameter.
+    ch_baysor_scale = ch_cellpose_opt.map { diam, flow, sharpen -> diam }
+
+    CELLPOSE_MASK_FULL(
+        ch_meta_img
+            .combine(ch_cellpose_opt)
+            .combine(ch_cellpose_baysor_opt.collect())  // gate: only run if baysor params exist
+            .map { meta, img, diam, flow, sharpen, _psc, _mmpc ->
+                tuple(meta, img, diam, flow, sharpen)
+            },
+        nucleus_segmentation_only
+    )
+
+    BAYSOR_FULL(
+        ch_meta_tx
+            .join(CELLPOSE_MASK_FULL.out.mask, by: 0)
+            .combine(ch_cellpose_baysor_opt)
+            .combine(ch_baysor_scale)
+            .map { meta, tx, mask, psc, mmpc, scale ->
+                tuple(meta, tx, mask, psc, mmpc, scale)
+            },
+        pixel_size_um
+    )
+
+    ch_baysor_s2 = BAYSOR_FULL.out.results
+        .join(ch_meta_h5ad, by: 0)
+        .map { meta, method, cells, tx, h5ad -> tuple(meta, method, cells, tx, h5ad) }
+
     // ── Baseline scoring (XOA outputs from nf-xenium-processing) ─────────────
     // nucleus_boundaries.parquet is used as the "cells" file for cell count.
     // transcripts.parquet from nf-xenium-processing carries the cell_id column.
@@ -149,6 +189,7 @@ workflow STAGE2_FULL_SCALE {
 
     ch_all_s2 = ch_proseg_s2
         .mix(ch_cellpose_s2)
+        .mix(ch_baysor_s2)
         .mix(ch_segger_s2)
         .mix(ch_xr_s2)
         .mix(ch_baseline)

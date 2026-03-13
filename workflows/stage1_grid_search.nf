@@ -8,6 +8,8 @@ include { CROP_TRANSCRIPTS       } from '../modules/local/crop_transcripts/main'
 include { CROP_IMAGE             } from '../modules/local/crop_image/main'
 include { PROSEG_CROP            } from '../modules/local/proseg_crop/main'
 include { CELLPOSE_CROP          } from '../modules/local/cellpose_crop/main'
+include { CELLPOSE_MASK_CROP     } from '../modules/local/cellpose_mask_crop/main'
+include { BAYSOR_CROP            } from '../modules/local/baysor_crop/main'
 include { SEGGER_PREDICT_CROP    } from '../modules/local/segger_predict_crop/main'
 include { XR_GRIDSEARCH          } from '../modules/local/xr_gridsearch/main'
 include { SCORE_CROP             } from '../modules/local/score_crop/main'
@@ -75,6 +77,15 @@ workflow STAGE1_GRID_SEARCH {
             row.boundary_stain ?: 'false'
         )}
 
+    ch_baysor_params = tsvs
+        .filter { it.name.startsWith("cellpose_baysor") }
+        .splitCsv(header: true, sep: '\t')
+        .map { row -> tuple(
+            row.param_hash,
+            row.prior_segmentation_confidence as Float,
+            row.min_molecules_per_cell        as Integer
+        )}
+
     // ── Split sample channel by component ────────────────────────────────────
     ch_meta_tx      = ch_samples.map { meta, tx, nuc, img, bun, ver -> tuple(meta, tx) }
     ch_meta_nucleus = ch_samples.map { meta, tx, nuc, img, bun, ver -> tuple(meta, nuc) }
@@ -138,6 +149,31 @@ workflow STAGE1_GRID_SEARCH {
         nucleus_segmentation_only
     )
 
+    // ── Cellpose+Baysor crop grid search ─────────────────────────────────────
+    // Cellpose runs once per crop at default params to generate the prior mask.
+    // Only Baysor params (prior_segmentation_confidence, min_molecules_per_cell) are varied.
+    // Default diameter: nucleus mode = 15 px, cell mode = 30 px.
+    def baysor_default_diameter = nucleus_segmentation_only.toString() == 'true' ? 15.0f : 30.0f
+
+    CELLPOSE_MASK_CROP(
+        ch_cropped_img,
+        nucleus_segmentation_only,
+        baysor_default_diameter,
+        0.4   // default flow_threshold
+    )
+
+    ch_baysor_crop_inputs = CELLPOSE_MASK_CROP.out.mask
+        .join(ch_cropped_tx, by: [0, 1])
+        .map { meta, crop_id, mask, tx -> tuple(meta, crop_id, tx, mask) }
+        .join(ch_crops.map { meta, csv -> [meta, csv] }, by: 0)
+        .map { meta, crop_id, tx, mask, crops_csv -> tuple(meta, crop_id, tx, mask, crops_csv) }
+        .combine(ch_baysor_params)
+        .map { meta, crop_id, tx, mask, crops_csv, ph, psc, mmpc ->
+            tuple(meta, crop_id, tx, mask, crops_csv, ph, psc, mmpc)
+        }
+
+    BAYSOR_CROP(ch_baysor_crop_inputs, pixel_size_um, baysor_default_diameter)
+
     // ── SEGGER grid search (optional — only if model provided) ───────────────
     // SEGGER runs on the full Xenium bundle (not crops): it needs
     // nucleus_boundaries.parquet for spatial graph construction.
@@ -172,6 +208,7 @@ workflow STAGE1_GRID_SEARCH {
     // [meta, crop_id, method, param_hash, cells_file, transcripts_assigned]
     ch_all_seg = PROSEG_CROP.out.results
         .mix(CELLPOSE_CROP.out.results)
+        .mix(BAYSOR_CROP.out.results)
         .mix(ch_segger_results)
         .mix(XR_GRIDSEARCH.out.results)
 
