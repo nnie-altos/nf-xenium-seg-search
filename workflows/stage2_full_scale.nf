@@ -9,6 +9,7 @@ include { BAYSOR_FULL        } from '../modules/local/baysor_full/main'
 include { SEGGER_FULL        } from '../modules/local/segger_full/main'
 include { XR_FULL            } from '../modules/local/xr_full/main'
 include { SCORE_FULL         } from '../modules/local/score_full/main'
+include { SCORE_AP           } from '../modules/local/score_ap/main'
 include { GENERATE_REPORT    } from '../modules/local/generate_report/main'
 
 workflow STAGE2_FULL_SCALE {
@@ -203,9 +204,18 @@ workflow STAGE2_FULL_SCALE {
         0      // baseline_cell_count: 0 disables yield normalization
     )
 
+    // ── Pairwise AP scoring across methods ────────────────────────────────────
+    // Collect [meta, method, cells_file] per sample then group for a single
+    // score_ap.py call per sample.
+    ch_ap_cells = ch_all_s2.map { meta, method, cells, tx, h5ad ->
+        tuple(meta, method, cells)
+    }
+    SCORE_AP(ch_ap_cells.groupTuple())
+
     // ── Generate HTML report ──────────────────────────────────────────────────
     GENERATE_REPORT(
         SCORE_FULL.out.score_csv.collect(),
+        SCORE_AP.out.ap_matrix.collect(),
         ch_scores_summary,
         ch_optimal_params
     )
@@ -213,4 +223,5 @@ workflow STAGE2_FULL_SCALE {
     emit:
     report     = GENERATE_REPORT.out.report
     score_csvs = SCORE_FULL.out.score_csv
+    ap_matrices = SCORE_AP.out.ap_matrix
 }

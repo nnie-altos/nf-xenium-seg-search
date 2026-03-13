@@ -8,6 +8,7 @@ process GENERATE_REPORT {
 
     input:
     path score_csvs     // collected Stage 2 score CSVs (one per sample × method)
+    path ap_matrices    // collected per-sample AP matrix CSVs from SCORE_AP
     path scores_summary // Stage 1 scores_summary.csv from SELECT_OPTIMAL_PARAMS
     path optimal_params // Stage 1 optimal_params.json (= param_manifest for report)
 
@@ -16,11 +17,13 @@ process GENERATE_REPORT {
 
     script:
     """
-    mkdir -p scores_dir
+    mkdir -p scores_dir ap_dir
     cp ${score_csvs} scores_dir/
+    cp ${ap_matrices} ap_dir/
 
     generate_report.py \\
         --scores-dir      scores_dir \\
+        --ap-dir          ap_dir \\
         --stage1-summary  ${scores_summary} \\
         --stage1-manifest ${optimal_params} \\
         --outdir          .

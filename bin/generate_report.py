@@ -188,6 +188,31 @@ def plot_metrics_heatmap(scores_df: pd.DataFrame) -> str:
     return fig_to_base64(fig)
 
 
+def plot_ap_heatmap(ap_df: pd.DataFrame, sample_id: str = None) -> str:
+    """AP matrix heatmap: method_a (test) × method_b (reference), value = AP.
+
+    Diagonal is NaN (no self-comparison). Higher = more similar segmentation.
+    """
+    pivot = ap_df.pivot(index="method_a", columns="method_b", values="ap")
+    methods = sorted(set(pivot.index) | set(pivot.columns))
+    pivot = pivot.reindex(index=methods, columns=methods)
+
+    fig, ax = plt.subplots(figsize=(max(4, len(methods) * 1.0),
+                                    max(3, len(methods) * 0.8)))
+    mask = np.eye(len(methods), dtype=bool)   # mask diagonal (self-comparison)
+    sns.heatmap(pivot, ax=ax, cmap="YlOrRd", annot=True, fmt=".3f",
+                linewidths=0.5, vmin=0, vmax=1, mask=mask,
+                cbar_kws={"label": "AP (precision × recall, mean over IoU thresholds)"})
+    title = "Pairwise AP: test method (row) vs reference method (col)"
+    if sample_id:
+        title += f"\nSample: {sample_id}"
+    ax.set_title(title)
+    ax.set_xlabel("Reference method")
+    ax.set_ylabel("Test method")
+    fig.tight_layout()
+    return fig_to_base64(fig)
+
+
 def plot_stage1_param_heatmap(stage1_df: pd.DataFrame, method: str) -> str:
     """Stage 1 parameter search score heatmap for one method."""
     sub = stage1_df[stage1_df["method"] == method].copy()
@@ -363,9 +388,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </div>
 <img src="data:image/png;base64,{metrics_heatmap}">
 
+{ap_section}
+
 {roi_section}
 
-<h2>8. Stage 1 Parameter Search</h2>
+<h2>9. Stage 1 Parameter Search</h2>
 <div class="caption">
   Heatmaps of Stage 1 grid search scores for each method. Axes show the two most variable
   parameters tested; cell color = mean composite score (assignment rate 60% + cell yield 40%)
@@ -386,6 +413,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--scores-dir", required=True)
+    parser.add_argument("--ap-dir", default=None,
+                        help="Directory containing *_ap_matrix.csv files from SCORE_AP")
     parser.add_argument("--stage1-summary", required=True)
     parser.add_argument("--stage1-manifest", required=True)
     parser.add_argument("--outdir", default=".")
@@ -460,6 +489,37 @@ def main():
         + table_rows + "</table>"
     )
 
+    # AP heatmaps (one per sample)
+    ap_section = ""
+    if args.ap_dir:
+        ap_dir = Path(args.ap_dir)
+        ap_files = list(ap_dir.glob("*_ap_matrix.csv"))
+        if ap_files:
+            ap_section = (
+                "<h2>7. Pairwise AP Scoring</h2>\n"
+                "<div class='caption'>"
+                "Average Precision (AP) between each pair of segmentation methods. "
+                "AP(A→B) measures how well method A recovers the same cells as method B: "
+                "for each IoU threshold from 0 to 1, a 1-to-1 greedy match is performed "
+                "and <em>precision × recall</em> is computed. AP = mean over all thresholds. "
+                "<strong>Higher AP = more similar segmentations.</strong> "
+                "Note: AP is not symmetric — AP(A→B) can differ from AP(B→A) when the "
+                "cell counts differ."
+                "</div>\n"
+            )
+            for ap_file in sorted(ap_files):
+                ap_df = pd.read_csv(ap_file)
+                if ap_df.empty:
+                    continue
+                sample_ids = ap_df["sample_id"].unique()
+                for sid in sample_ids:
+                    sub = ap_df[ap_df["sample_id"] == sid]
+                    b64 = plot_ap_heatmap(sub, sample_id=sid)
+                    ap_section += (
+                        f"<h3>Sample: {sid}</h3>"
+                        f'<img src="data:image/png;base64,{b64}">'
+                    )
+
     # Stage 1 heatmaps
     stage1_heatmaps = ""
     for method in methods:
@@ -472,7 +532,7 @@ def main():
 
     # ROI section (placeholder — populated if bundles dir provided)
     roi_section = (
-        "<h2>7. ROI Visual Checks</h2>"
+        "<h2>8. ROI Visual Checks</h2>"
         "<div class='caption'>ROI overlays require --bundles and --morphology-dir arguments. "
         "Run with those arguments to generate segmentation mask overlays on morphology images.</div>"
     )
@@ -489,6 +549,7 @@ def main():
         recovery_chart=recovery_chart,
         yield_chart=yield_chart,
         metrics_heatmap=metrics_heatmap,
+        ap_section=ap_section,
         roi_section=roi_section,
         stage1_heatmaps=stage1_heatmaps,
     )
