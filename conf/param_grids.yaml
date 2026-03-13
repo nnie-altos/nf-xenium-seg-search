@@ -50,13 +50,12 @@ cellpose:
 segger:
   defaults:
     min_transcripts_per_cell: 25
-    d_max: 2.0
+    dist_tx: 5.0
     tile_size: 120
   # Minimum transcripts per cell to retain a cell (post-processing filter)
   min_transcripts_per_cell: [10, 25, 50]
-  # Maximum distance (µm) for transcript-to-nucleus edges in spatial graph construction
-  # NOTE: requires d_max to be exposed in the SEGGER create_dataset module
-  d_max: [1.5, 2.0, 2.5]
+  # Maximum distance for transcript-to-transcript edges in spatial graph (--dist_tx, default 5.0)
+  dist_tx: [2.5, 5.0, 7.5]
   # Spatial tile width/height for graph construction (µm)
   tile_size: [80, 120, 160]
   # Grid: 3×3×3 = 27

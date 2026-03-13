@@ -61,6 +61,7 @@ workflow STAGE1_GRID_SEARCH {
         .map { row -> tuple(
             row.param_hash,
             row.min_transcripts_per_cell as Integer,
+            row.dist_tx                  as Float,
             row.tile_size                as Integer
         )}
 
@@ -145,8 +146,8 @@ workflow STAGE1_GRID_SEARCH {
     if (segger_model) {
         SEGGER_PREDICT_CROP(
             ch_meta_bundle.combine(ch_segger_params)
-                .map { meta, bundle, ph, min_tx, tile ->
-                    tuple(meta, bundle, ph, tile, min_tx)
+                .map { meta, bundle, ph, min_tx, dist_tx, tile ->
+                    tuple(meta, bundle, ph, tile, dist_tx, min_tx)
                 },
             file(segger_model)
         )

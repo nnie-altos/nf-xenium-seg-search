@@ -54,9 +54,9 @@ workflow STAGE2_FULL_SCALE {
         .filter { m -> m.containsKey("segger") }
         .map { m ->
             def p = m.segger.params
-            // Order matches SEGGER_FULL input: min_transcripts_per_cell, tile_size
-            // (module reorders to tile, min_tx internally)
-            tuple(p.min_transcripts_per_cell as Integer, p.tile_size as Integer)
+            // Order matches SEGGER_FULL input: min_transcripts_per_cell, dist_tx, tile_size
+            // (module reorders to tile, dist_tx, min_tx internally)
+            tuple(p.min_transcripts_per_cell as Integer, p.dist_tx as Float, p.tile_size as Integer)
         }
 
     ch_xr_opt = ch_optimal_map
@@ -97,7 +97,7 @@ workflow STAGE2_FULL_SCALE {
     if (segger_model) {
         SEGGER_FULL(
             ch_meta_bundle.combine(ch_segger_opt)
-                .map { meta, bundle, min_tx, tile -> tuple(meta, bundle, tile, min_tx) },
+                .map { meta, bundle, min_tx, dist_tx, tile -> tuple(meta, bundle, tile, dist_tx, min_tx) },
             file(segger_model)
         )
         ch_segger_results = SEGGER_FULL.out.results

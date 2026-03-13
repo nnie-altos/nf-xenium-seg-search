@@ -10,7 +10,7 @@ process SEGGER_PREDICT_CROP {
 
     input:
     tuple val(meta), path(xenium_bundle, stageAs: "bundle/"), val(param_hash),
-          val(tile_size), val(min_transcripts_per_cell)
+          val(tile_size), val(dist_tx), val(min_transcripts_per_cell)
     path segger_model
 
     output:
@@ -57,6 +57,7 @@ PYEOF
         --sample_type xenium \\
         --tile_width  ${tile_size} \\
         --tile_height ${tile_size} \\
+        --dist_tx     ${dist_tx} \\
         --n_workers   ${task.cpus}
 
     # ── Run SEGGER prediction ────────────────────────────────────────────────────
