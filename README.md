@@ -34,6 +34,12 @@ nextflow run main.nf \
     -profile docker,test
 ```
 
+Validate the pipeline logic without containers (stub run):
+
+```bash
+nextflow run main.nf -stub -profile test,stub
+```
+
 ## Samplesheet format
 
 CSV with three columns (all other paths are derived automatically):
