@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 include { PROSEG_FULL        } from '../modules/local/proseg_full/main'
+include { PROSEG_ASSIGN_FULL } from '../modules/local/proseg_assign_full/main'
 include { CELLPOSE_FULL      } from '../modules/local/cellpose_full/main'
 include { CELLPOSE_MASK_FULL } from '../modules/local/cellpose_mask_full/main'
 include { BAYSOR_FULL        } from '../modules/local/baysor_full/main'
@@ -92,6 +93,14 @@ workflow STAGE2_FULL_SCALE {
                 tuple(meta, tx, compact, max_nuc_dist, vox, diff)
             }
     )
+    // Join proseg raw outputs back with original transcripts for Python post-processing.
+    // PROSEG_FULL.out.raw: [meta, transcript_metadata, cell_polygons]
+    PROSEG_ASSIGN_FULL(
+        PROSEG_FULL.out.raw
+            .join(ch_meta_tx, by: 0)
+            // [meta, transcript_metadata, cell_polygons, transcripts]
+            .map { meta, tm, cp, tx -> tuple(meta, tx, tm, cp) }
+    )
 
     // ── Cellpose full-scale ───────────────────────────────────────────────────
     CELLPOSE_FULL(
@@ -173,7 +182,7 @@ workflow STAGE2_FULL_SCALE {
 
     // ── Assemble all method results for scoring ───────────────────────────────
     // Format: [meta, method, cells_file, transcripts_assigned, h5ad]
-    ch_proseg_s2 = PROSEG_FULL.out.results
+    ch_proseg_s2 = PROSEG_ASSIGN_FULL.out.results
         .join(ch_meta_h5ad, by: 0)
         .map { meta, method, cells, tx, h5ad -> tuple(meta, method, cells, tx, h5ad) }
 

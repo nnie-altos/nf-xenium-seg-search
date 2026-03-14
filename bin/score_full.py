@@ -35,6 +35,30 @@ from pathlib import Path
 from scipy.sparse import issparse
 
 
+def read_h5ad_safe(path: str):
+    """Read h5ad, handling older files that stored uns values as null encoding.
+
+    Older anndata versions wrote uns/log1p/base = None with encoding_type='null',
+    which anndata 0.10.x cannot read back. Strip the offending key and retry.
+    """
+    try:
+        return sc.read_h5ad(path)
+    except Exception as e:
+        if "null" not in str(e):
+            raise
+        import tempfile, shutil, h5py, os
+        with tempfile.NamedTemporaryFile(suffix=".h5ad", delete=False) as tmp:
+            tmp_path = tmp.name
+        shutil.copy2(path, tmp_path)
+        try:
+            with h5py.File(tmp_path, "r+") as f:
+                if "uns/log1p" in f:
+                    del f["uns/log1p"]
+            return sc.read_h5ad(tmp_path)
+        finally:
+            os.unlink(tmp_path)
+
+
 def normalize(s: str) -> str:
     return str(s).lower().replace("-", "").replace("_", "").replace(" ", "")
 
@@ -142,7 +166,7 @@ def main():
     print(f"Scoring {args.method} / {args.sample} ...", file=sys.stderr)
 
     # Load data
-    adata = sc.read_h5ad(args.h5ad)
+    adata = read_h5ad_safe(args.h5ad)
     marker_dict = load_markers(args.markers)
 
     # Compute metrics

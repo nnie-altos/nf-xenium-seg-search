@@ -4,7 +4,7 @@ process CELLPOSE_MASK_FULL {
     tag "${meta.id}"
     label 'process_gpu'
 
-    container 'ghcr.io/mouseland/cellpose:3.0.11'
+    container 'docker.io/altoslabscom/cellpose:4.0.8'
 
     input:
     tuple val(meta), path(morphology_tif),
@@ -15,6 +15,7 @@ process CELLPOSE_MASK_FULL {
     tuple val(meta), path("cp_mask.tif"), emit: mask
 
     script:
+    def cellpose_model = nucleus_segmentation_only.toString() == "true" ? "nuclei" : "cyto3"
     """
     if [ "${sharpen_tiff}" = "true" ]; then
         python3 - <<'SHARP'
@@ -34,10 +35,9 @@ SHARP
         INPUT_IMG="${morphology_tif}"
     fi
 
-    CELLPOSE_MODEL="${nucleus_segmentation_only}" == "true" ? "nuclei" : "cyto3"
     python3 -m cellpose \\
         --image_path \${INPUT_IMG} \\
-        --pretrained_model \${CELLPOSE_MODEL} \\
+        --pretrained_model ${cellpose_model} \\
         --diameter ${diameter} \\
         --flow_threshold ${flow_threshold} \\
         --no_npy \\

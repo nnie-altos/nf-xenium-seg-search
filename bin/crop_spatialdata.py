@@ -14,11 +14,14 @@ Output (per crop in crops.csv):
     <crop_id>_morphology.tif
 """
 import sys
+import json
+import itertools
 import numpy as np
 import pandas as pd
 import tifffile
-import zarr
+import dask  # noqa: F401 (used via dask.delayed)
 import dask.array as da
+from math import ceil
 from pathlib import Path
 
 from spatialdata import SpatialData, bounding_box_query
@@ -30,11 +33,48 @@ def load_image_as_sdata(morphology_path: str, pixel_size_um: float) -> SpatialDa
     """
     Load an OME-TIFF lazily and wrap it in a SpatialData object with a Scale
     transform so bounding_box_query operates in micron space.
+
+    Uses ZarrTiffStore (zarr 2 MutableMapping) directly rather than zarr.open(),
+    which is incompatible with zarr 3.x. Chunks are read on demand via dask.
     """
     tif = tifffile.TiffFile(morphology_path)
-    store = tif.aszarr(level=0)
-    z = zarr.open(store, mode="r")
-    img_dask = da.from_zarr(z)
+    v2_store = tif.aszarr(level=0)  # zarr 2 MutableMapping; zarr 3.x open() rejects it
+
+    meta = json.loads(v2_store['.zarray'])
+    shape = tuple(meta['shape'])       # e.g. (C, Y, X)
+    chunk_shape = tuple(meta['chunks'])
+    dtype = np.dtype(meta['dtype'])
+    fill_value = meta.get('fill_value', 0)
+
+    print(f"Morphology image shape: {shape}, dtype: {dtype}", file=sys.stderr)
+
+    ndim = len(shape)
+    chunk_grid = tuple(ceil(shape[i] / chunk_shape[i]) for i in range(ndim))
+
+    def get_chunk(*chunk_idx):
+        key = '.'.join(str(i) for i in chunk_idx)
+        try:
+            raw = v2_store[key]
+        except KeyError:
+            # chunk not stored → fill with fill_value (zarr convention)
+            actual = tuple(min(chunk_shape[i], shape[i] - chunk_idx[i] * chunk_shape[i])
+                           for i in range(ndim))
+            return np.full(actual, fill_value, dtype=dtype)
+        actual = tuple(min(chunk_shape[i], shape[i] - chunk_idx[i] * chunk_shape[i])
+                       for i in range(ndim))
+        return np.frombuffer(raw, dtype=dtype).reshape(actual)
+
+    delayed_chunks = np.empty(chunk_grid, dtype=object)
+    for idx in itertools.product(*[range(n) for n in chunk_grid]):
+        actual_shape = tuple(min(chunk_shape[i], shape[i] - idx[i] * chunk_shape[i])
+                             for i in range(ndim))
+        delayed_chunks[idx] = da.from_delayed(
+            dask.delayed(get_chunk)(*idx),
+            shape=actual_shape,
+            dtype=dtype,
+        )
+
+    img_dask = da.block(delayed_chunks.tolist())
 
     shape = img_dask.shape
     print(f"Morphology image shape: {shape}, dtype: {img_dask.dtype}", file=sys.stderr)

@@ -5,7 +5,7 @@ process RENDER_CROP_OVERLAY {
     tag "${meta.id}:${crop_id}:${method}:${param_hash}"
     label 'process_low'
 
-    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.3'
+    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.4'
 
     input:
     tuple val(meta), val(crop_id), val(method), val(param_hash),

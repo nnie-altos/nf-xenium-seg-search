@@ -1,6 +1,8 @@
 // ProSeg crop-level grid search.
 // CLI: proseg --xenium <transcripts.parquet> [OPTIONS]
 // Transcript assignments are in --output-transcript-metadata (cell_id column).
+// Python join step is handled by the downstream PROSEG_ASSIGN_CROP module
+// (proseg container has no Python).
 process PROSEG_CROP {
     tag "${meta.id}:${crop_id}:${param_hash}"
     label 'process_medium'
@@ -13,9 +15,9 @@ process PROSEG_CROP {
           val(voxel_size), val(diffusion_probability)
 
     output:
-    tuple val(meta), val(crop_id), val("proseg"), val(param_hash),
-          path("cell_polygons.geojson.gz"), path("transcripts_assigned.parquet"),
-          emit: results
+    tuple val(meta), val(crop_id), val(param_hash),
+          path("transcript_metadata.parquet"), path("cell_polygons.geojson.gz"),
+          emit: raw
 
     script:
     """
@@ -28,37 +30,9 @@ process PROSEG_CROP {
         --voxel-size                ${voxel_size} \\
         --diffusion-probability     ${diffusion_probability} \\
         --ignore-z-coord
-
-    # Join ProSeg transcript metadata (cell_id) back to original transcripts parquet
-    python3 - <<'PYEOF'
-import pandas as pd, sys
-
-t = pd.read_parquet("${transcripts}")
-m = pd.read_parquet("transcript_metadata.parquet")
-
-print(f"  transcript_metadata columns: {list(m.columns)}", file=sys.stderr)
-
-# ProSeg transcript metadata contains a cell_id column; join by index or transcript_id
-if "transcript_id" in m.columns and "transcript_id" in t.columns:
-    t = t.merge(m[["transcript_id", "cell_id"]], on="transcript_id", how="left")
-elif "cell_id" in m.columns and len(m) == len(t):
-    t = t.copy()
-    t["cell_id"] = m["cell_id"].values
-else:
-    # Try positional — last resort
-    cell_col = [c for c in m.columns if "cell" in c.lower()]
-    if cell_col:
-        t = t.copy()
-        t["cell_id"] = m[cell_col[0]].values
-    else:
-        print("WARNING: could not find cell assignment column in transcript metadata", file=sys.stderr)
-        t["cell_id"] = None
-
-t.to_parquet("transcripts_assigned.parquet", index=False)
-PYEOF
     """
     stub:
     """
-    touch cell_polygons.geojson.gz transcripts_assigned.parquet
+    touch cell_polygons.geojson.gz transcript_metadata.parquet
     """
 }

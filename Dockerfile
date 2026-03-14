@@ -33,7 +33,14 @@ RUN uv pip install --system --no-cache \
     spatialdata==0.7.2 \
     dask==2025.5.1 \
     xarray==2025.3.1 \
-    zarr==3.0.10
+    zarr==3.0.10 \
+    imagecodecs==2024.9.22
+
+# Fix spatialdata 0.7.2 bug: uses ArrayNotFoundError which was removed in zarr 3.x.
+# GroupNotFoundError is the closest zarr 3.x equivalent.
+RUN sed -i \
+    's/from zarr.errors import ArrayNotFoundError/from zarr.errors import GroupNotFoundError as ArrayNotFoundError/' \
+    /usr/local/lib/python3.11/site-packages/spatialdata/_io/io_zarr.py
 
 # Pre-warm numba cache in a world-writable directory so non-root container
 # users (Nextflow passes -u $(id -u):$(id -g)) can read/write the cache.

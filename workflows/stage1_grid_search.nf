@@ -6,6 +6,7 @@ include { GENERATE_PARAM_COMBOS  } from '../modules/local/generate_param_combos/
 include { SELECT_CROPS           } from '../modules/local/select_crops/main'
 include { CROP_SPATIALDATA       } from '../modules/local/crop_spatialdata/main'
 include { PROSEG_CROP            } from '../modules/local/proseg_crop/main'
+include { PROSEG_ASSIGN_CROP     } from '../modules/local/proseg_assign_crop/main'
 include { CELLPOSE_CROP          } from '../modules/local/cellpose_crop/main'
 include { CELLPOSE_MASK_CROP     } from '../modules/local/cellpose_mask_crop/main'
 include { BAYSOR_CROP            } from '../modules/local/baysor_crop/main'
@@ -47,7 +48,7 @@ workflow STAGE1_GRID_SEARCH {
         )}
 
     ch_cellpose_params = tsvs
-        .filter { it.name.startsWith("cellpose") }
+        .filter { it.name == "cellpose_params.tsv" }
         .splitCsv(header: true, sep: '\t')
         .map { row -> tuple(
             row.param_hash,
@@ -129,6 +130,17 @@ workflow STAGE1_GRID_SEARCH {
                 tuple(meta, crop_id, tx, ph, compact, max_nuc_dist, vox, diff)
             }
     )
+    // Join proseg raw outputs back with original transcripts for Python post-processing.
+    // PROSEG_CROP.out.raw: [meta, crop_id, param_hash, transcript_metadata, cell_polygons]
+    // ch_cropped_tx:       [meta, crop_id, transcripts]
+    PROSEG_ASSIGN_CROP(
+        PROSEG_CROP.out.raw
+            .join(ch_cropped_tx, by: [0, 1])
+            // [meta, crop_id, param_hash, transcript_metadata, cell_polygons, transcripts]
+            .map { meta, crop_id, ph, tm, cp, tx ->
+                tuple(meta, crop_id, ph, tx, tm, cp)
+            }
+    )
 
     // ── Cellpose crop grid search ─────────────────────────────────────────────
     // Join tx + img + crops_csv by (meta, crop_id) then cross with params.
@@ -204,7 +216,7 @@ workflow STAGE1_GRID_SEARCH {
     // ── Mix all segmentation results and score ────────────────────────────────
     // All results share the same tuple shape:
     // [meta, crop_id, method, param_hash, cells_file, transcripts_assigned]
-    ch_all_seg = PROSEG_CROP.out.results
+    ch_all_seg = PROSEG_ASSIGN_CROP.out.results
         .mix(CELLPOSE_CROP.out.results)
         .mix(BAYSOR_CROP.out.results)
         .mix(ch_segger_results)

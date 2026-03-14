@@ -7,7 +7,7 @@ process CELLPOSE_CROP {
     tag "${meta.id}:${crop_id}:${param_hash}"
     label 'process_gpu'
 
-    container 'ghcr.io/mouseland/cellpose:3.0.11'
+    container 'docker.io/altoslabscom/cellpose:4.0.8'
 
     input:
     tuple val(meta), val(crop_id), path(transcripts), path(image), path(crops_csv),
@@ -21,6 +21,7 @@ process CELLPOSE_CROP {
           emit: results
 
     script:
+    def cellpose_model = nucleus_segmentation_only.toString() == "true" ? "nuclei" : "cyto3"
     """
     # Optionally sharpen image before Cellpose (unsharp mask via skimage)
     if [ "${sharpen_tiff}" = "true" ]; then
@@ -42,10 +43,9 @@ SHARP
     fi
 
     # Run Cellpose segmentation (cyto3 for full cells, nuclei for nucleus-only mode)
-    CELLPOSE_MODEL="${nucleus_segmentation_only}" == "true" ? "nuclei" : "cyto3"
     python3 -m cellpose \\
         --image_path \${INPUT_IMG} \\
-        --pretrained_model \${CELLPOSE_MODEL} \\
+        --pretrained_model ${cellpose_model} \\
         --diameter ${diameter} \\
         --flow_threshold ${flow_threshold} \\
         --no_npy \\

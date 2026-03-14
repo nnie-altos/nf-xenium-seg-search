@@ -9,7 +9,7 @@ process CROP_SPATIALDATA {
     tag "${meta.id}"
     label 'process_medium'
 
-    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.3'
+    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.4'
 
     input:
     tuple val(meta), path(transcripts), path(morphology_tif), path(crops_csv)
