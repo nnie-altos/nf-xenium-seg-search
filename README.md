@@ -74,6 +74,31 @@ Derived paths (resolved at runtime):
 | `--skip_stage1` | `false` | Skip parameter search; use `--optimal_params` |
 | `--optimal_params` | `null` | Path to `optimal_params.json` from a prior Stage 1 run |
 | `--param_grids` | `conf/param_grids.yaml` | Parameter grid definitions |
+| `--cellpose_cache_dir` | `null` | Host path to a pre-populated Cellpose model cache. Avoids re-downloading the 1.15 GB CPSAM model on every task. See note below. |
+
+### Cellpose model cache
+
+Cellpose 4.x downloads the CPSAM model (1.15 GB) to `$HOME/.cellpose/models/` on first
+use. In a Docker run each Nextflow task spawns a fresh container, so without a shared
+cache the model is re-downloaded for every Cellpose task. Pre-populate a host directory
+once and pass it via `--cellpose_cache_dir`:
+
+```bash
+# One-time setup
+mkdir -p ~/.cellpose_model_cache
+docker run --rm \
+  -e HOME=~/.cellpose_model_cache \
+  -v ~/.cellpose_model_cache:~/.cellpose_model_cache \
+  docker.io/altoslabscom/cellpose:4.0.8 \
+  python -c "from cellpose import models; models.CellposeModel(pretrained_model='cpsam')"
+sudo chmod -R a+rX ~/.cellpose_model_cache
+
+# Then run with the cache
+nextflow run main.nf ... --cellpose_cache_dir ~/.cellpose_model_cache
+```
+
+On cloud executors (AWS Batch) the model is typically downloaded once per worker node
+and reused across tasks in the same job queue.
 
 ## Markers file format
 
