@@ -10,26 +10,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir \
-    numpy==1.26.4 \
+RUN pip install --no-cache-dir uv
+
+RUN uv pip install --system --no-cache \
+    numpy==2.0.2 \
     pandas==2.2.2 \
-    scipy==1.13.1 \
+    scipy==1.14.1 \
     scanpy==1.10.1 \
-    tifffile==2024.2.12 \
+    tifffile==2025.3.30 \
     "geopandas==0.14.4" \
     shapely==2.0.4 \
     matplotlib==3.8.4 \
     plotly==5.22.0 \
     kaleido==0.2.1 \
     pyyaml==6.0.1 \
-    pyarrow==15.0.2 \
-    scikit-image==0.23.2 \
+    pyarrow==17.0.0 \
+    scikit-image==0.24.0 \
     h5py==3.11.0 \
     anndata==0.10.7 \
+    statsmodels==0.14.4 \
+    patsy==0.5.6 \
     spatialdata==0.7.2 \
-    dask==2024.5.0 \
-    xarray==2024.5.0 \
-    zarr==2.18.2
+    dask==2025.5.1 \
+    xarray==2025.3.1 \
+    zarr==3.0.10
 
 # Copy bin scripts so they're available on PATH inside the container
 COPY bin/ /usr/local/bin/
