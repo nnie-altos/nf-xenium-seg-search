@@ -2,7 +2,7 @@ process SELECT_OPTIMAL_PARAMS {
     tag "select_optimal_params"
     label 'process_low'
 
-    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.2'
+    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.3'
 
     publishDir "${params.outdir}/stage1", mode: params.publish_dir_mode
 

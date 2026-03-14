@@ -2,7 +2,7 @@ process SCORE_FULL {
     tag "${meta.id}:${method}"
     label 'process_medium'
 
-    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.2'
+    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.3'
 
     publishDir "${params.outdir}/${meta.id}/scores", mode: params.publish_dir_mode
 

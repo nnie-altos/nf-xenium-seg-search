@@ -35,6 +35,13 @@ RUN uv pip install --system --no-cache \
     xarray==2025.3.1 \
     zarr==3.0.10
 
+# Pre-warm numba cache in a world-writable directory so non-root container
+# users (Nextflow passes -u $(id -u):$(id -g)) can read/write the cache.
+ENV NUMBA_CACHE_DIR=/opt/numba_cache
+RUN mkdir -p /opt/numba_cache && \
+    python -c "import scanpy" && \
+    chmod -R 777 /opt/numba_cache
+
 # Copy bin scripts so they're available on PATH inside the container
 COPY bin/ /usr/local/bin/
 RUN chmod +x /usr/local/bin/*.py

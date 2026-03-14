@@ -2,7 +2,7 @@ process SELECT_CROPS {
     tag "${meta.id}"
     label 'process_low'
 
-    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.2'
+    container 'ghcr.io/nnie-altos/xenium-seg-search:0.1.3'
 
     publishDir "${params.outdir}/${meta.id}/crops", mode: params.publish_dir_mode
 
